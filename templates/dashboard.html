@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block page_sub %}Ringkasan kondisi kebun hari ini{% endblock %}
+
+{% block content %}
+<!-- STAT CARDS -->
+<div class="stats-grid" id="stats-grid">
+  <div class="stat-card green">
+    <div class="stat-icon green"><i class="icon-leaf"></i></div>
+    <div class="stat-value" id="s-panen">—</div>
+    <div class="stat-label">Total Panen Bulan Ini</div>
+    <div class="stat-sub" id="s-panen-sub">memuat…</div>
+  </div>
+  <div class="stat-card gold">
+    <div class="stat-icon gold"><i class="icon-trending-up"></i></div>
+    <div class="stat-value" id="s-pendapatan">—</div>
+    <div class="stat-label">Pendapatan Bulan Ini</div>
+    <div class="stat-sub" id="s-laba-sub">memuat…</div>
+  </div>
+  <div class="stat-card red">
+    <div class="stat-icon red"><i class="icon-trending-down"></i></div>
+    <div class="stat-value" id="s-beban">—</div>
+    <div class="stat-label">Total Beban Bulan Ini</div>
+    <div class="stat-sub" id="s-beban-sub"></div>
+  </div>
+  <div class="stat-card blue">
+    <div class="stat-icon blue"><i class="icon-users"></i></div>
+    <div class="stat-value" id="s-karyawan">—</div>
+    <div class="stat-label">Karyawan Aktif</div>
+    <div class="stat-sub" id="s-stok-sub">memuat…</div>
+  </div>
+</div>
+
+<!-- CHARTS ROW -->
+<div class="grid-2 mb-6">
+  <!-- Grafik Produksi -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><i class="icon-bar-chart-2"></i> Produksi 7 Hari Terakhir</div>
+      <span class="badge badge-green" style="font-size:11px">Kg</span>
+    </div>
+    <div class="card-body">
+      <div class="chart-area">
+        <div class="chart-bars" id="chart-produksi">
+          <div class="loading"><div class="spinner"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Grafik Keuangan -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><i class="icon-activity"></i> Keuangan 6 Bulan</div>
+      <div class="flex gap-2">
+        <span class="badge badge-green" style="font-size:10px">● Pendapatan</span>
+        <span class="badge badge-gold" style="font-size:10px">● Beban</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="chart-area">
+        <div class="chart-bars" id="chart-keuangan">
+          <div class="loading"><div class="spinner"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- BOTTOM ROW -->
+<div class="grid-2">
+  <!-- Aktivitas Terbaru -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><i class="icon-clock"></i> Aktivitas Terbaru</div>
+    </div>
+    <div id="aktivitas-list">
+      <div class="loading"><div class="spinner"></div> Memuat…</div>
+    </div>
+  </div>
+
+  <!-- Laba Bersih & Ringkasan -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><i class="icon-pie-chart"></i> Ringkasan Keuangan</div>
+    </div>
+    <div class="card-body" id="ringkasan-keuangan">
+      <div class="loading"><div class="spinner"></div></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+async function loadDashboard() {
+  const res = await fetch('/api/dashboard');
+  const d = await res.json();
+
+  // Stats
+  document.getElementById('s-panen').textContent = Number(d.total_panen).toLocaleString('id-ID') + ' kg';
+  document.getElementById('s-pendapatan').textContent = fmtRp(d.total_pendapatan);
+  document.getElementById('s-beban').textContent = fmtRp(d.total_beban);
+  document.getElementById('s-karyawan').textContent = d.jumlah_karyawan + ' orang';
+  document.getElementById('s-panen-sub').textContent = 'Komoditas aktif bulan ini';
+  document.getElementById('s-laba-sub').innerHTML = `Laba bersih: <strong>${fmtRp(d.laba_bersih)}</strong>`;
+  document.getElementById('s-stok-sub').textContent = d.stok_kritis + ' item stok kritis';
+
+  // Grafik Produksi
+  const maxProd = Math.max(...d.grafik_produksi.map(x => x.berat), 1);
+  document.getElementById('chart-produksi').innerHTML = d.grafik_produksi.map(p => {
+    const pct = Math.max((p.berat / maxProd) * 100, p.berat > 0 ? 5 : 0);
+    const lbl = p.tanggal.slice(5).replace('-', '/');
+    return `<div class="chart-bar-wrap">
+      <div style="flex:1;display:flex;align-items:flex-end;width:100%">
+        <div class="chart-bar green" style="height:${pct}%" title="${p.berat} kg"></div>
+      </div>
+      <div class="chart-label">${lbl}</div>
+    </div>`;
+  }).join('');
+
+  // Grafik Keuangan
+  const maxKeu = Math.max(...d.grafik_keuangan.map(x => Math.max(x.pendapatan, x.beban)), 1);
+  document.getElementById('chart-keuangan').innerHTML = d.grafik_keuangan.map(k => {
+    const pPct = Math.max((k.pendapatan / maxKeu) * 100, k.pendapatan > 0 ? 4 : 0);
+    const bPct = Math.max((k.beban / maxKeu) * 100, k.beban > 0 ? 4 : 0);
+    const lbl = k.bulan.slice(2).replace('-', '/');
+    return `<div class="chart-bar-wrap">
+      <div style="flex:1;display:flex;align-items:flex-end;width:100%;gap:3px">
+        <div class="chart-bar green" style="height:${pPct}%;flex:1" title="Pendapatan: ${fmtRp(k.pendapatan)}"></div>
+        <div class="chart-bar gold" style="height:${bPct}%;flex:1" title="Beban: ${fmtRp(k.beban)}"></div>
+      </div>
+      <div class="chart-label">${lbl}</div>
+    </div>`;
+  }).join('');
+
+  // Aktivitas
+  const icons = { 'Panen': '🌿', 'Jurnal': '📒' };
+  document.getElementById('aktivitas-list').innerHTML = `<div style="padding: 0 4px">` +
+    d.aktivitas.map(a => `
+      <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 18px;border-bottom:1px solid var(--border)">
+        <div style="font-size:18px;margin-top:2px">${icons[a.jenis] || '📌'}</div>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:500;color:var(--text-dark)">${a.deskripsi}</div>
+          <div style="font-size:11px;color:var(--text-soft);margin-top:2px">${a.jenis} · ${a.tanggal}</div>
+        </div>
+      </div>`).join('') + `</div>`;
+
+  // Ringkasan Keuangan
+  const laba = d.laba_bersih;
+  const labaColor = laba >= 0 ? 'var(--moss)' : 'var(--danger)';
+  document.getElementById('ringkasan-keuangan').innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div style="background:var(--fog);border-radius:10px;padding:16px 18px">
+        <div style="font-size:11px;color:var(--text-soft);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Laba Bersih</div>
+        <div style="font-family:'DM Serif Display',serif;font-size:30px;color:${labaColor};margin-top:4px">${fmtRp(Math.abs(laba))}</div>
+        <div style="font-size:12px;color:var(--text-soft);margin-top:4px">${laba >= 0 ? '✓ Positif bulan ini' : '⚠ Merugi bulan ini'}</div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        ${keuRow('Pendapatan', d.total_pendapatan, 'var(--moss)')}
+        ${keuRow('Beban', d.total_beban, 'var(--danger)')}
+        ${keuRow('Laba / Rugi', laba, labaColor, true)}
+      </div>
+
+      ${d.stok_kritis > 0 ? `
+        <div class="alert alert-warning">
+          <span>⚠</span>
+          <span>${d.stok_kritis} item gudang di bawah stok minimum. <a href="/gudang" style="color:inherit;font-weight:600">Cek gudang →</a></span>
+        </div>` : ''}
+    </div>`;
+}
+
+function keuRow(label, val, color, bold = false) {
+  return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;
+    background:#fff;border:1px solid var(--border);border-radius:8px;${bold?'border-color:'+color+';':''}"
+  >
+    <span style="font-size:13px;${bold?'font-weight:600':''};color:var(--text-mid)">${label}</span>
+    <span style="font-size:13.5px;font-weight:600;color:${color}">${fmtRp(Math.abs(val))}</span>
+  </div>`;
+}
+
+loadDashboard();
+</script>
+{% endblock %}

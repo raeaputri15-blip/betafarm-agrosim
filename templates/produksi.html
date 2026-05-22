@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block title %}Produksi & Panen{% endblock %}
+{% block page_title %}Produksi & Panen{% endblock %}
+{% block page_sub %}Catat dan pantau hasil panen harian{% endblock %}
+
+{% block content %}
+<!-- STATS -->
+<div class="stats-grid mb-6" style="grid-template-columns:repeat(3,1fr)">
+  <div class="stat-card green">
+    <div class="stat-icon green"><i class="icon-package"></i></div>
+    <div class="stat-value" id="sp-total-kg">—</div>
+    <div class="stat-label">Total Panen (kg)</div>
+  </div>
+  <div class="stat-card gold">
+    <div class="stat-icon gold"><i class="icon-dollar-sign"></i></div>
+    <div class="stat-value" id="sp-total-nilai">—</div>
+    <div class="stat-label">Total Nilai Panen</div>
+  </div>
+  <div class="stat-card blue">
+    <div class="stat-icon blue"><i class="icon-clipboard-list"></i></div>
+    <div class="stat-value" id="sp-total-trx">—</div>
+    <div class="stat-label">Jumlah Transaksi</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <div class="card-title"><i class="icon-leaf"></i> Data Panen</div>
+    <button class="btn btn-primary btn-sm" onclick="openModal('modal-panen')">
+      <i class="icon-plus"></i> Catat Panen
+    </button>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Tanggal</th>
+          <th>Komoditas</th>
+          <th>Blok</th>
+          <th>Berat (kg)</th>
+          <th>Kualitas</th>
+          <th>Harga/kg</th>
+          <th>Nilai</th>
+          <th>Catatan</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="tbl-produksi">
+        <tr><td colspan="9"><div class="loading"><div class="spinner"></div> Memuat data…</div></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- MODAL TAMBAH PANEN -->
+<div class="modal-overlay" id="modal-panen">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Catat Hasil Panen</div>
+      <button class="modal-close" onclick="closeModal('modal-panen')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Tanggal Panen</label>
+          <input type="date" id="f-tanggal">
+        </div>
+        <div class="form-group">
+          <label>Komoditas</label>
+          <select id="f-komoditas">
+            <option>Kelapa Sawit</option>
+            <option>Karet</option>
+            <option>Kopi</option>
+            <option>Kakao</option>
+            <option>Kelapa</option>
+            <option>Lainnya</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Blok / Petak</label>
+          <input type="text" id="f-blok" placeholder="cth. Blok A">
+        </div>
+        <div class="form-group">
+          <label>Berat Panen (kg)</label>
+          <input type="number" id="f-berat" min="0" step="0.1" placeholder="0">
+        </div>
+        <div class="form-group">
+          <label>Kualitas</label>
+          <select id="f-kualitas">
+            <option value="A">A — Terbaik</option>
+            <option value="B">B — Sedang</option>
+            <option value="C">C — Bawah</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Harga per kg (Rp)</label>
+          <input type="number" id="f-harga" min="0" placeholder="0">
+        </div>
+        <div class="form-group full">
+          <label>Catatan</label>
+          <textarea id="f-catatan" placeholder="Keterangan tambahan…"></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-panen')">Batal</button>
+      <button class="btn btn-primary" onclick="simpanPanen()"><i class="icon-save"></i> Simpan</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+// Set default date today
+document.getElementById('f-tanggal').valueAsDate = new Date();
+
+async function loadProduksi() {
+  const res = await fetch('/api/produksi');
+  const d = await res.json();
+
+  document.getElementById('sp-total-kg').textContent = Number(d.total_kg).toLocaleString('id-ID') + ' kg';
+  document.getElementById('sp-total-nilai').textContent = fmtRp(d.total_nilai);
+  document.getElementById('sp-total-trx').textContent = d.total_transaksi;
+
+  const kualBadge = { A: 'badge-green', B: 'badge-gold', C: 'badge-red' };
+  const rows = d.data.map(r => `
+    <tr>
+      <td>${r.tanggal}</td>
+      <td><strong>${r.komoditas}</strong></td>
+      <td>${r.blok || '—'}</td>
+      <td><strong>${Number(r.berat_kg).toLocaleString('id-ID')}</strong></td>
+      <td><span class="badge ${kualBadge[r.kualitas]||'badge-gray'}">${r.kualitas}</span></td>
+      <td>${fmtRp(r.harga_per_kg)}</td>
+      <td><strong>${fmtRp(r.berat_kg * r.harga_per_kg)}</strong></td>
+      <td style="max-width:150px;color:var(--text-soft);font-size:12px">${r.catatan || '—'}</td>
+      <td>
+        <button class="btn btn-danger btn-sm" onclick="hapusPanen(${r.id})">
+          <i class="icon-trash-2"></i>
+        </button>
+      </td>
+    </tr>`).join('');
+
+  document.getElementById('tbl-produksi').innerHTML = rows || `
+    <tr><td colspan="9">
+      <div class="empty-state">
+        <i class="icon-leaf"></i>
+        <h3>Belum ada data panen</h3>
+        <p>Klik "Catat Panen" untuk menambahkan.</p>
+      </div>
+    </td></tr>`;
+}
+
+async function simpanPanen() {
+  const payload = {
+    tanggal: document.getElementById('f-tanggal').value,
+    komoditas: document.getElementById('f-komoditas').value,
+    blok: document.getElementById('f-blok').value,
+    berat_kg: document.getElementById('f-berat').value,
+    kualitas: document.getElementById('f-kualitas').value,
+    harga_per_kg: document.getElementById('f-harga').value,
+    catatan: document.getElementById('f-catatan').value,
+  };
+
+  if (!payload.tanggal || !payload.berat_kg) {
+    toast('Tanggal dan berat wajib diisi', 'error'); return;
+  }
+
+  const res = await fetch('/api/produksi', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  if ((await res.json()).success) {
+    closeModal('modal-panen');
+    toast('Data panen berhasil disimpan ✓');
+    loadProduksi();
+    document.getElementById('f-berat').value = '';
+    document.getElementById('f-catatan').value = '';
+  }
+}
+
+async function hapusPanen(id) {
+  if (!confirm('Hapus data panen ini?')) return;
+  await fetch('/api/produksi/' + id, { method: 'DELETE' });
+  toast('Data dihapus', 'error');
+  loadProduksi();
+}
+
+loadProduksi();
+</script>
+{% endblock %}

@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+{% block title %}Jurnal Keuangan{% endblock %}
+{% block page_title %}Jurnal Keuangan{% endblock %}
+{% block page_sub %}Pencatatan transaksi keuangan kebun secara sistematis{% endblock %}
+
+{% block content %}
+<!-- SUMMARY CARDS -->
+<div class="stats-grid mb-6" style="grid-template-columns:repeat(3,1fr)">
+  <div class="stat-card green">
+    <div class="stat-icon green"><i class="icon-arrow-up-circle"></i></div>
+    <div class="stat-value" id="sk-pendapatan">—</div>
+    <div class="stat-label">Total Pendapatan</div>
+  </div>
+  <div class="stat-card red">
+    <div class="stat-icon red"><i class="icon-arrow-down-circle"></i></div>
+    <div class="stat-value" id="sk-beban">—</div>
+    <div class="stat-label">Total Beban</div>
+  </div>
+  <div class="stat-card gold">
+    <div class="stat-icon gold"><i class="icon-trending-up"></i></div>
+    <div class="stat-value" id="sk-laba">—</div>
+    <div class="stat-label">Laba / Rugi Bersih</div>
+  </div>
+</div>
+
+<!-- TOOLBAR -->
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px">
+  <div class="flex items-center gap-2">
+    <label style="font-size:12px;color:var(--text-soft)">Bulan:</label>
+    <input type="month" id="filter-bulan" style="padding:6px 10px;font-size:13px">
+    <button class="btn btn-outline btn-sm" onclick="loadJurnal()"><i class="icon-refresh-cw"></i> Muat</button>
+  </div>
+  <button class="btn btn-primary" onclick="openModal('modal-jurnal')">
+    <i class="icon-plus"></i> Tambah Jurnal
+  </button>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <div class="card-title"><i class="icon-book-open"></i> Buku Jurnal</div>
+    <div id="jurnal-count" style="font-size:12px;color:var(--text-soft)"></div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Tanggal</th>
+          <th>No. Ref</th>
+          <th>Keterangan</th>
+          <th>Akun Debit</th>
+          <th>Akun Kredit</th>
+          <th>Kategori</th>
+          <th class="text-right">Nominal</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="tbl-jurnal">
+        <tr><td colspan="8"><div class="loading"><div class="spinner"></div></div></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- MODAL TAMBAH JURNAL -->
+<div class="modal-overlay" id="modal-jurnal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Tambah Entri Jurnal</div>
+      <button class="modal-close" onclick="closeModal('modal-jurnal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="alert alert-success" style="margin-bottom:16px">
+        <span>💡</span>
+        <span style="font-size:12px">Transaksi panen dan pembelian gudang otomatis tercatat di sini. Tambahkan jurnal manual hanya jika perlu.</span>
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Tanggal</label>
+          <input type="date" id="fj-tanggal">
+        </div>
+        <div class="form-group">
+          <label>No. Referensi (opsional)</label>
+          <input type="text" id="fj-ref" placeholder="cth. INV-001">
+        </div>
+        <div class="form-group full">
+          <label>Keterangan Transaksi</label>
+          <input type="text" id="fj-ket" placeholder="cth. Pembelian pupuk urea dari Toko Tani">
+        </div>
+        <div class="form-group">
+          <label>Akun Debit</label>
+          <select id="fj-debit">
+            <option>Kas</option>
+            <option>Piutang Dagang</option>
+            <option>Beban Gaji</option>
+            <option>Beban Pupuk</option>
+            <option>Beban Pestisida</option>
+            <option>Beban Bahan</option>
+            <option>Beban Operasional</option>
+            <option>Beban Perawatan</option>
+            <option>Aset Tetap</option>
+            <option>Lainnya</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Akun Kredit</label>
+          <select id="fj-kredit">
+            <option>Pendapatan Panen</option>
+            <option>Pendapatan Lainnya</option>
+            <option>Kas</option>
+            <option>Hutang Dagang</option>
+            <option>Modal</option>
+            <option>Lainnya</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Kategori</label>
+          <select id="fj-kategori">
+            <option>Pendapatan</option>
+            <option>Beban</option>
+            <option>Modal</option>
+            <option>Lainnya</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Nominal (Rp)</label>
+          <input type="number" id="fj-nominal" min="0" placeholder="0">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-jurnal')">Batal</button>
+      <button class="btn btn-primary" onclick="simpanJurnal()"><i class="icon-save"></i> Catat</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+document.getElementById('filter-bulan').value = new Date().toISOString().slice(0,7);
+document.getElementById('fj-tanggal').valueAsDate = new Date();
+
+const katBadge = { Pendapatan: 'badge-green', Beban: 'badge-red', Modal: 'badge-blue', Lainnya: 'badge-gray' };
+
+async function loadJurnal() {
+  const bulan = document.getElementById('filter-bulan').value;
+  const res = await fetch('/api/jurnal?bulan='+bulan);
+  const d = await res.json();
+
+  const laba = d.laba;
+  document.getElementById('sk-pendapatan').textContent = fmtRp(d.pendapatan);
+  document.getElementById('sk-beban').textContent = fmtRp(d.beban);
+  document.getElementById('sk-laba').textContent = fmtRp(Math.abs(laba));
+  document.getElementById('sk-laba').style.color = laba >= 0 ? 'var(--moss)' : 'var(--danger)';
+  document.getElementById('jurnal-count').textContent = d.data.length + ' entri';
+
+  let no = 1;
+  document.getElementById('tbl-jurnal').innerHTML = d.data.map(j => `
+    <tr>
+      <td style="white-space:nowrap">${j.tanggal}</td>
+      <td style="color:var(--text-soft);font-size:12px">${j.no_referensi || '—'}</td>
+      <td style="max-width:200px"><strong style="font-size:13px">${j.keterangan}</strong></td>
+      <td><span style="font-size:12px;color:var(--danger);font-weight:500">D: ${j.akun_debit}</span></td>
+      <td><span style="font-size:12px;color:var(--moss);font-weight:500">K: ${j.akun_kredit}</span></td>
+      <td><span class="badge ${katBadge[j.kategori]||'badge-gray'}">${j.kategori}</span></td>
+      <td class="text-right"><strong>${fmtRp(j.nominal)}</strong></td>
+      <td>
+        <button class="btn btn-danger btn-sm" onclick="hapusJurnal(${j.id})">
+          <i class="icon-trash-2"></i>
+        </button>
+      </td>
+    </tr>`).join('') || `<tr><td colspan="8">
+      <div class="empty-state">
+        <i class="icon-book-open"></i>
+        <h3>Belum ada entri jurnal</h3>
+        <p>Tambahkan transaksi atau catat hasil panen untuk mulai.</p>
+      </div>
+    </td></tr>`;
+}
+
+async function simpanJurnal() {
+  const payload = {
+    tanggal: document.getElementById('fj-tanggal').value,
+    no_referensi: document.getElementById('fj-ref').value,
+    keterangan: document.getElementById('fj-ket').value,
+    akun_debit: document.getElementById('fj-debit').value,
+    akun_kredit: document.getElementById('fj-kredit').value,
+    kategori: document.getElementById('fj-kategori').value,
+    nominal: document.getElementById('fj-nominal').value,
+  };
+  if (!payload.keterangan || !payload.nominal) { toast('Keterangan dan nominal wajib diisi','error'); return; }
+  const res = await fetch('/api/jurnal', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+  if ((await res.json()).success) {
+    closeModal('modal-jurnal');
+    toast('Jurnal berhasil dicatat ✓');
+    loadJurnal();
+    document.getElementById('fj-ket').value = '';
+    document.getElementById('fj-nominal').value = '';
+    document.getElementById('fj-ref').value = '';
+  }
+}
+
+async function hapusJurnal(id) {
+  if (!confirm('Hapus entri jurnal ini?')) return;
+  await fetch('/api/jurnal/'+id, { method:'DELETE' });
+  toast('Entri jurnal dihapus','error');
+  loadJurnal();
+}
+
+loadJurnal();
+</script>
+{% endblock %}

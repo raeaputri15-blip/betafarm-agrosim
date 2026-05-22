@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% block title %}Laporan{% endblock %}
+{% block page_title %}Laporan Keuangan{% endblock %}
+{% block page_sub %}Laporan Laba Rugi dan ringkasan keuangan bulanan{% endblock %}
+
+{% block content %}
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:24px;flex-wrap:wrap">
+  <div class="flex items-center gap-2">
+    <label style="font-size:12px;font-weight:600;color:var(--text-mid)">Periode:</label>
+    <input type="month" id="lap-bulan" style="padding:8px 12px;font-size:13px">
+    <button class="btn btn-primary" onclick="loadLaporan()"><i class="icon-file-text"></i> Generate Laporan</button>
+  </div>
+</div>
+
+<!-- LAPORAN LABA RUGI -->
+<div class="card mb-5" id="laporan-area" style="display:none">
+  <div class="card-header">
+    <div class="card-title"><i class="icon-file-text"></i> Laporan Laba Rugi</div>
+    <div id="lap-periode" style="font-size:12px;color:var(--text-soft)"></div>
+  </div>
+  <div class="card-body">
+
+    <div style="max-width:640px;margin:0 auto">
+      <!-- Kop Laporan -->
+      <div style="text-align:center;margin-bottom:28px;padding-bottom:20px;border-bottom:2px solid var(--forest)">
+        <div style="font-size:13px;color:var(--text-soft);text-transform:uppercase;letter-spacing:1px">Kebun Nusantara</div>
+        <div style="font-family:'DM Serif Display',serif;font-size:22px;color:var(--forest);margin:4px 0">Laporan Laba Rugi</div>
+        <div id="lap-periode-kop" style="font-size:13px;color:var(--text-soft)"></div>
+      </div>
+
+      <!-- PENDAPATAN -->
+      <div id="seksi-pendapatan"></div>
+
+      <!-- BEBAN -->
+      <div id="seksi-beban" style="margin-top:24px"></div>
+
+      <!-- LABA BERSIH -->
+      <div id="seksi-laba"></div>
+
+      <!-- RASIO -->
+      <div id="seksi-rasio" style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border)"></div>
+    </div>
+  </div>
+</div>
+
+<!-- PLACEHOLDER -->
+<div id="laporan-placeholder" class="card">
+  <div class="card-body">
+    <div class="empty-state" style="padding:60px 24px">
+      <i class="icon-bar-chart-2"></i>
+      <h3>Pilih Periode & Generate Laporan</h3>
+      <p>Pilih bulan di atas lalu klik "Generate Laporan" untuk melihat<br>Laporan Laba Rugi secara otomatis.</p>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_style %}
+<style>
+.lr-row {
+  display:flex; justify-content:space-between; align-items:center;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+.lr-row:last-child { border-bottom: none; }
+.lr-row .label { color: var(--text-mid); }
+.lr-row .amount { font-weight: 600; color: var(--text-dark); }
+.lr-section-title {
+  font-family: 'DM Serif Display', serif;
+  font-size: 16px;
+  color: var(--forest);
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--forest);
+}
+.lr-subtotal {
+  display:flex; justify-content:space-between; align-items:center;
+  padding: 10px 12px;
+  background: var(--fog);
+  border-radius: 8px;
+  margin-top: 6px;
+  font-weight: 600;
+}
+.lr-total {
+  display:flex; justify-content:space-between; align-items:center;
+  padding: 16px 20px;
+  border-radius: 12px;
+  margin-top: 20px;
+  font-size: 16px;
+  font-weight: 700;
+}
+.rasio-item {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display:flex; justify-content:space-between; align-items:center;
+}
+</style>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+document.getElementById('lap-bulan').value = new Date().toISOString().slice(0,7);
+
+function bulanLabel(str) {
+  const [y, m] = str.split('-');
+  const bulan = ['Januari','Februari','Maret','April','Mei','Juni',
+                 'Juli','Agustus','September','Oktober','November','Desember'];
+  return bulan[parseInt(m)-1] + ' ' + y;
+}
+
+async function loadLaporan() {
+  const bulan = document.getElementById('lap-bulan').value;
+  const res = await fetch('/api/laporan/laba_rugi?bulan='+bulan);
+  const d = await res.json();
+
+  document.getElementById('laporan-placeholder').style.display = 'none';
+  document.getElementById('laporan-area').style.display = '';
+
+  const lbl = bulanLabel(bulan);
+  document.getElementById('lap-periode').textContent = 'Periode: ' + lbl;
+  document.getElementById('lap-periode-kop').textContent = 'Periode ' + lbl;
+
+  // Pendapatan
+  document.getElementById('seksi-pendapatan').innerHTML = `
+    <div class="lr-section-title">A. Pendapatan</div>
+    ${d.pendapatan.map(p => `
+      <div class="lr-row">
+        <span class="label">${p.akun}</span>
+        <span class="amount text-green">${fmtRp(p.total)}</span>
+      </div>`).join('') || '<div class="lr-row"><span class="label" style="color:var(--text-soft)">Tidak ada pendapatan</span><span>Rp 0</span></div>'}
+    <div class="lr-subtotal">
+      <span>Total Pendapatan</span>
+      <span class="text-green">${fmtRp(d.total_pendapatan)}</span>
+    </div>`;
+
+  // Beban
+  document.getElementById('seksi-beban').innerHTML = `
+    <div class="lr-section-title">B. Beban Usaha</div>
+    ${d.beban.map(b => `
+      <div class="lr-row">
+        <span class="label">${b.akun}</span>
+        <span class="amount text-red">(${fmtRp(b.total)})</span>
+      </div>`).join('') || '<div class="lr-row"><span class="label" style="color:var(--text-soft)">Tidak ada beban</span><span>Rp 0</span></div>'}
+    <div class="lr-subtotal">
+      <span>Total Beban</span>
+      <span class="text-red">(${fmtRp(d.total_beban)})</span>
+    </div>`;
+
+  // Laba Bersih
+  const laba = d.laba_bersih;
+  const labaColor = laba >= 0 ? 'var(--moss)' : 'var(--danger)';
+  const labaBg = laba >= 0 ? 'var(--mist)' : 'var(--danger-lt)';
+  const labaLabel = laba >= 0 ? 'LABA BERSIH' : 'RUGI BERSIH';
+  document.getElementById('seksi-laba').innerHTML = `
+    <div class="lr-total" style="background:${labaBg};border:2px solid ${labaColor}">
+      <span style="color:${labaColor}">${labaLabel}</span>
+      <span style="font-family:'DM Serif Display',serif;font-size:22px;color:${labaColor}">${fmtRp(Math.abs(laba))}</span>
+    </div>`;
+
+  // Rasio
+  const marginPct = d.total_pendapatan > 0 ? ((laba / d.total_pendapatan) * 100).toFixed(1) : 0;
+  const rasioColor = marginPct >= 0 ? 'var(--moss)' : 'var(--danger)';
+  document.getElementById('seksi-rasio').innerHTML = `
+    <div style="font-size:12px;font-weight:600;color:var(--text-soft);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">
+      Analisis Rasio
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <div class="rasio-item">
+        <div>
+          <div style="font-size:11px;color:var(--text-soft)">Margin Laba</div>
+          <div style="font-size:18px;font-weight:700;color:${rasioColor}">${marginPct}%</div>
+        </div>
+        <div style="font-size:22px">${marginPct >= 0 ? '📈' : '📉'}</div>
+      </div>
+      <div class="rasio-item">
+        <div>
+          <div style="font-size:11px;color:var(--text-soft)">Rasio Beban</div>
+          <div style="font-size:18px;font-weight:700;color:var(--warning)">
+            ${d.total_pendapatan > 0 ? ((d.total_beban/d.total_pendapatan)*100).toFixed(1) : 0}%
+          </div>
+        </div>
+        <div style="font-size:22px">⚖️</div>
+      </div>
+      <div class="rasio-item">
+        <div>
+          <div style="font-size:11px;color:var(--text-soft)">Status</div>
+          <div style="font-size:14px;font-weight:700;color:${labaColor}">${laba >= 0 ? 'Untung' : 'Rugi'}</div>
+        </div>
+        <div style="font-size:22px">${laba >= 0 ? '✅' : '❌'}</div>
+      </div>
+    </div>
+    <div style="margin-top:16px;font-size:11px;color:var(--text-soft);text-align:center">
+      Laporan dibuat otomatis oleh AgroSIM · ${new Date().toLocaleDateString('id-ID', {day:'numeric',month:'long',year:'numeric'})}
+    </div>`;
+}
+</script>
+{% endblock %}
