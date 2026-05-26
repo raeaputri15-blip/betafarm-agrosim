@@ -1,0 +1,293 @@
+{% extends "base.html" %}
+{% block title %}Gudang & Stok{% endblock %}
+{% block page_title %}Gudang & Stok{% endblock %}
+{% block page_sub %}Pantau stok pupuk, pestisida, dan peralatan kebun{% endblock %}
+
+{% block content %}
+<div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap">
+  <button class="btn btn-primary" onclick="openModal('modal-barang')">
+    <i class="icon-plus"></i> Tambah Barang
+  </button>
+  <button class="btn btn-outline" onclick="openModal('modal-transaksi')">
+    <i class="icon-arrow-right-left"></i> Transaksi Stok
+  </button>
+</div>
+
+<!-- FILTER KATEGORI -->
+<div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap" id="filter-btns">
+  <button class="filter-btn active" data-kat="Semua" onclick="filterKategori(this,'Semua')">Semua</button>
+  <button class="filter-btn" data-kat="Pupuk" onclick="filterKategori(this,'Pupuk')">🌿 Pupuk</button>
+  <button class="filter-btn" data-kat="Pestisida" onclick="filterKategori(this,'Pestisida')">🧪 Pestisida</button>
+  <button class="filter-btn" data-kat="Alat" onclick="filterKategori(this,'Alat')">🔧 Alat</button>
+  <button class="filter-btn" data-kat="Kemasan" onclick="filterKategori(this,'Kemasan')">📦 Kemasan</button>
+</div>
+
+<!-- STOK CARDS -->
+<div id="gudang-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;margin-bottom:24px">
+  <div class="loading" style="grid-column:1/-1"><div class="spinner"></div> Memuat stok…</div>
+</div>
+
+<!-- TABLE DETAIL -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-title"><i class="icon-table"></i> Detail Stok Gudang</div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Nama Barang</th><th>Kategori</th><th>Stok Saat Ini</th><th>Satuan</th><th>Stok Min.</th><th>Harga Satuan</th><th>Nilai Stok</th><th>Status</th></tr>
+      </thead>
+      <tbody id="tbl-gudang">
+        <tr><td colspan="8"><div class="loading"><div class="spinner"></div></div></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- MODAL TAMBAH BARANG -->
+<div class="modal-overlay" id="modal-barang">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Tambah Barang Gudang</div>
+      <button class="modal-close" onclick="closeModal('modal-barang')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group full">
+          <label>Nama Barang</label>
+          <input type="text" id="fb-nama" placeholder="cth. Pupuk NPK 16-16-16">
+        </div>
+        <div class="form-group">
+          <label>Kategori</label>
+          <select id="fb-kategori">
+            <option>Pupuk</option>
+            <option>Pestisida</option>
+            <option>Alat</option>
+            <option>Kemasan</option>
+            <option>Lainnya</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Satuan</label>
+          <select id="fb-satuan">
+            <option>Kg</option>
+            <option>Liter</option>
+            <option>Unit</option>
+            <option>Lembar</option>
+            <option>Karung</option>
+            <option>Botol</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Stok Awal</label>
+          <input type="number" id="fb-stok" min="0" placeholder="0">
+        </div>
+        <div class="form-group">
+          <label>Harga Satuan (Rp)</label>
+          <input type="number" id="fb-harga" min="0" placeholder="0">
+        </div>
+        <div class="form-group full">
+          <label>Stok Minimum (peringatan)</label>
+          <input type="number" id="fb-min" min="0" placeholder="0">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-barang')">Batal</button>
+      <button class="btn btn-primary" onclick="simpanBarang()"><i class="icon-save"></i> Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL TRANSAKSI STOK -->
+<div class="modal-overlay" id="modal-transaksi">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Transaksi Stok</div>
+      <button class="modal-close" onclick="closeModal('modal-transaksi')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group full">
+          <label>Barang</label>
+          <select id="ft-barang" id="ft-barang"></select>
+        </div>
+        <div class="form-group">
+          <label>Jenis Transaksi</label>
+          <select id="ft-jenis">
+            <option value="masuk">Barang Masuk (Pembelian)</option>
+            <option value="keluar">Barang Keluar (Pemakaian)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Tanggal</label>
+          <input type="date" id="ft-tanggal">
+        </div>
+        <div class="form-group">
+          <label>Jumlah</label>
+          <input type="number" id="ft-jumlah" min="0.1" step="0.1" placeholder="0">
+        </div>
+        <div class="form-group">
+          <label>Harga Satuan (Rp)</label>
+          <input type="number" id="ft-harga" min="0" placeholder="0">
+        </div>
+        <div class="form-group full">
+          <label>Keterangan</label>
+          <input type="text" id="ft-keterangan" placeholder="cth. Pembelian dari toko Tani Jaya">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-transaksi')">Batal</button>
+      <button class="btn btn-primary" onclick="simpanTransaksi()"><i class="icon-save"></i> Proses</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_style %}
+<style>
+.filter-btn {
+  padding: 7px 16px; border-radius: 20px; border: 1.5px solid var(--border);
+  background: #fff; color: var(--text-soft); cursor: pointer;
+  font-size: 13px; font-family: 'DM Sans', sans-serif; transition: all .15s;
+}
+.filter-btn:hover { border-color: var(--fern); color: var(--moss); }
+.filter-btn.active { background: var(--forest); color: #fff; border-color: var(--forest); }
+
+.stok-card {
+  background: #fff; border: 1px solid var(--border); border-radius: 14px;
+  padding: 18px; transition: all .2s; position: relative; overflow: hidden;
+}
+.stok-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(26,46,26,.08); }
+.stok-card.kritis { border-color: #e74c3c; }
+.stok-card.kritis::after {
+  content: '⚠ Stok Kritis';
+  position: absolute; top: 10px; right: -28px;
+  background: var(--danger); color: #fff;
+  font-size: 10px; font-weight: 600; padding: 3px 36px;
+  transform: rotate(35deg); letter-spacing: .5px;
+}
+.stok-bar-bg { background: var(--fog); border-radius: 4px; height: 6px; margin-top: 10px; overflow: hidden; }
+.stok-bar { height: 100%; border-radius: 4px; transition: width .5s ease; }
+</style>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+document.getElementById('ft-tanggal').valueAsDate = new Date();
+let allBarang = [];
+let currentKat = 'Semua';
+
+const katIcon = { Pupuk:'🌿', Pestisida:'🧪', Alat:'🔧', Kemasan:'📦', Lainnya:'📋' };
+
+async function loadGudang() {
+  const res = await fetch('/api/gudang');
+  const d = await res.json();
+  allBarang = d.data;
+
+  // Populate select
+  const sel = document.getElementById('ft-barang');
+  sel.innerHTML = allBarang.map(b => `<option value="${b.id}">${b.nama_barang} (stok: ${b.stok_sekarang} ${b.satuan})</option>`).join('');
+
+  renderGudang();
+}
+
+function filterKategori(btn, kat) {
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  currentKat = kat;
+  renderGudang();
+}
+
+function renderGudang() {
+  const data = currentKat === 'Semua' ? allBarang : allBarang.filter(b => b.kategori === currentKat);
+
+  // Cards
+  document.getElementById('gudang-grid').innerHTML = data.map(b => {
+    const pct = b.stok_minimum > 0 ? Math.min((b.stok_sekarang / (b.stok_minimum * 3)) * 100, 100) : 50;
+    const barColor = b.stok_sekarang <= b.stok_minimum ? 'var(--danger)' : pct < 50 ? 'var(--gold)' : 'var(--fern)';
+    const kritis = b.stok_sekarang <= b.stok_minimum;
+    return `
+      <div class="stok-card ${kritis ? 'kritis' : ''}">
+        <div style="font-size:22px;margin-bottom:8px">${katIcon[b.kategori]||'📋'}</div>
+        <div style="font-weight:600;font-size:14px;color:var(--forest);margin-bottom:2px">${b.nama_barang}</div>
+        <div style="font-size:11px;color:var(--text-soft);margin-bottom:10px">${b.kategori}</div>
+        <div style="font-family:'DM Serif Display',serif;font-size:28px;color:${barColor}">
+          ${Number(b.stok_sekarang).toLocaleString('id-ID')}
+          <span style="font-family:'DM Sans',sans-serif;font-size:13px;color:var(--text-soft)">${b.satuan}</span>
+        </div>
+        <div class="stok-bar-bg">
+          <div class="stok-bar" style="width:${pct}%;background:${barColor}"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:11px;color:var(--text-soft)">
+          <span>Min: ${b.stok_minimum} ${b.satuan}</span>
+          <span>${fmtRp(b.stok_sekarang * b.harga_satuan)}</span>
+        </div>
+      </div>`;
+  }).join('') || '<div class="empty-state" style="grid-column:1/-1"><p>Tidak ada barang di kategori ini</p></div>';
+
+  // Table
+  document.getElementById('tbl-gudang').innerHTML = data.map(b => {
+    const kritis = b.stok_sekarang <= b.stok_minimum;
+    const badge = kritis ? 'badge-red' : b.stok_sekarang <= b.stok_minimum * 1.5 ? 'badge-gold' : 'badge-green';
+    const status = kritis ? 'Kritis' : b.stok_sekarang <= b.stok_minimum * 1.5 ? 'Menipis' : 'Aman';
+    return `<tr ${kritis ? 'style="background:var(--danger-lt)"' : ''}>
+      <td><strong>${b.nama_barang}</strong></td>
+      <td><span class="badge badge-gray">${b.kategori}</span></td>
+      <td><strong style="color:${kritis?'var(--danger)':'inherit'}">${Number(b.stok_sekarang).toLocaleString('id-ID')}</strong></td>
+      <td>${b.satuan}</td>
+      <td>${b.stok_minimum}</td>
+      <td>${fmtRp(b.harga_satuan)}</td>
+      <td>${fmtRp(b.stok_sekarang * b.harga_satuan)}</td>
+      <td><span class="badge ${badge}">${status}</span></td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="8"><div class="empty-state"><p>Tidak ada data</p></div></td></tr>`;
+}
+
+async function simpanBarang() {
+  const payload = {
+    nama_barang: document.getElementById('fb-nama').value,
+    kategori: document.getElementById('fb-kategori').value,
+    satuan: document.getElementById('fb-satuan').value,
+    stok_awal: document.getElementById('fb-stok').value || 0,
+    harga_satuan: document.getElementById('fb-harga').value || 0,
+    stok_minimum: document.getElementById('fb-min').value || 0,
+  };
+  if (!payload.nama_barang) { toast('Nama barang wajib diisi','error'); return; }
+  const res = await fetch('/api/gudang', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+  if ((await res.json()).success) {
+    closeModal('modal-barang');
+    toast('Barang berhasil ditambahkan');
+    loadGudang();
+    document.getElementById('fb-nama').value = '';
+  }
+}
+
+async function simpanTransaksi() {
+  const barangId = document.getElementById('ft-barang').value;
+  const payload = {
+    barang_id: barangId,
+    jenis: document.getElementById('ft-jenis').value,
+    tanggal: document.getElementById('ft-tanggal').value,
+    jumlah: document.getElementById('ft-jumlah').value,
+    harga_satuan: document.getElementById('ft-harga').value || 0,
+    keterangan: document.getElementById('ft-keterangan').value,
+  };
+  if (!payload.jumlah) { toast('Jumlah wajib diisi','error'); return; }
+  const res = await fetch('/api/gudang/transaksi', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+  const d = await res.json();
+  if (d.success) {
+    closeModal('modal-transaksi');
+    toast(`Stok diperbarui. Sisa: ${d.stok_baru}`);
+    loadGudang();
+    document.getElementById('ft-jumlah').value = '';
+    document.getElementById('ft-keterangan').value = '';
+  } else {
+    toast(d.error || 'Gagal memproses transaksi', 'error');
+  }
+}
+
+loadGudang();
+</script>
+{% endblock %}

@@ -1,0 +1,308 @@
+{% extends "base.html" %}
+{% block title %}SDM & Penggajian{% endblock %}
+{% block page_title %}SDM & Penggajian{% endblock %}
+{% block page_sub %}Kelola karyawan, absensi, dan perhitungan gaji otomatis{% endblock %}
+
+{% block content %}
+<div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap">
+  <button class="btn btn-primary" onclick="openModal('modal-karyawan')">
+    <i class="icon-user-plus"></i> Tambah Karyawan
+  </button>
+  <button class="btn btn-outline" onclick="showTab('absensi')">
+    <i class="icon-check-square"></i> Absensi Hari Ini
+  </button>
+  <button class="btn btn-outline" onclick="showTab('gaji')">
+    <i class="icon-calculator"></i> Hitung Gaji
+  </button>
+</div>
+
+<!-- TABS -->
+<div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:20px">
+  <button class="tab-btn active" id="tab-karyawan" onclick="showTab('karyawan')">
+    <i class="icon-users"></i> Data Karyawan
+  </button>
+  <button class="tab-btn" id="tab-absensi" onclick="showTab('absensi')">
+    <i class="icon-calendar"></i> Absensi
+  </button>
+  <button class="tab-btn" id="tab-gaji" onclick="showTab('gaji')">
+    <i class="icon-dollar-sign"></i> Slip Gaji
+  </button>
+</div>
+
+<!-- TAB: KARYAWAN -->
+<div id="panel-karyawan" class="tab-panel">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><i class="icon-users"></i> Daftar Karyawan</div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Nama</th><th>Jabatan</th><th>Upah Harian</th><th>No. HP</th><th>Status</th><th></th></tr>
+        </thead>
+        <tbody id="tbl-karyawan">
+          <tr><td colspan="6"><div class="loading"><div class="spinner"></div></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- TAB: ABSENSI -->
+<div id="panel-absensi" class="tab-panel" style="display:none">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><i class="icon-calendar"></i> Absensi Karyawan</div>
+      <div class="flex items-center gap-2">
+        <input type="date" id="absensi-tanggal" style="padding:6px 10px;font-size:12px">
+        <button class="btn btn-outline btn-sm" onclick="loadAbsensi()"><i class="icon-refresh-cw"></i></button>
+        <button class="btn btn-primary btn-sm" onclick="inputAbsensiCepat()">Input Massal</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Nama</th><th>Jabatan</th><th>Status</th><th>Lembur (jam)</th><th>Upah Hari Ini</th><th>Aksi</th></tr>
+        </thead>
+        <tbody id="tbl-absensi">
+          <tr><td colspan="6"><div class="loading"><div class="spinner"></div></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div id="absensi-form-area" style="margin-top:16px;display:none"></div>
+</div>
+
+<!-- TAB: GAJI -->
+<div id="panel-gaji" class="tab-panel" style="display:none">
+  <div class="card mb-4">
+    <div class="card-header">
+      <div class="card-title"><i class="icon-dollar-sign"></i> Rekapitulasi Gaji</div>
+      <div class="flex items-center gap-2">
+        <input type="month" id="gaji-bulan" style="padding:6px 10px;font-size:12px">
+        <button class="btn btn-primary btn-sm" onclick="loadGaji()"><i class="icon-calculator"></i> Hitung</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Nama</th><th>Jabatan</th><th>Hari Kerja</th><th>Lembur</th><th>Upah Pokok</th><th>Upah Lembur</th><th>Total Gaji</th></tr>
+        </thead>
+        <tbody id="tbl-gaji">
+          <tr><td colspan="7"><div class="empty-state" style="padding:24px">
+            <p>Pilih bulan lalu klik Hitung</p>
+          </div></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div id="gaji-summary" style="padding:16px 22px;border-top:1px solid var(--border);display:none">
+    </div>
+  </div>
+</div>
+
+<!-- MODAL TAMBAH KARYAWAN -->
+<div class="modal-overlay" id="modal-karyawan">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Tambah Karyawan Baru</div>
+      <button class="modal-close" onclick="closeModal('modal-karyawan')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group full">
+          <label>Nama Lengkap</label>
+          <input type="text" id="fk-nama" placeholder="cth. Ahmad Fauzi">
+        </div>
+        <div class="form-group">
+          <label>Jabatan</label>
+          <select id="fk-jabatan">
+            <option>Mandor</option>
+            <option>Pemanen</option>
+            <option>Pemupukan</option>
+            <option>Petugas Gudang</option>
+            <option>Penjaga Kebun</option>
+            <option>Supir</option>
+            <option>Lainnya</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Upah Harian (Rp)</label>
+          <input type="number" id="fk-upah" placeholder="85000">
+        </div>
+        <div class="form-group full">
+          <label>Nomor HP</label>
+          <input type="text" id="fk-hp" placeholder="08xx-xxxx-xxxx">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-karyawan')">Batal</button>
+      <button class="btn btn-primary" onclick="simpanKaryawan()"><i class="icon-save"></i> Simpan</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_style %}
+<style>
+.tab-btn {
+  background: none; border: none; cursor: pointer;
+  padding: 10px 18px; font-family: 'DM Sans', sans-serif;
+  font-size: 13.5px; color: var(--text-soft);
+  border-bottom: 2px solid transparent; margin-bottom: -2px;
+  display:flex; align-items:center; gap:6px;
+  transition: all .15s;
+}
+.tab-btn:hover { color: var(--moss); }
+.tab-btn.active { color: var(--moss); border-bottom-color: var(--moss); font-weight:600; }
+.absensi-quick { display:flex; gap:6px; }
+.abs-btn {
+  padding: 4px 10px; border-radius: 6px; border: 1.5px solid var(--border);
+  font-size: 12px; cursor: pointer; font-family: 'DM Sans', sans-serif;
+  transition: all .15s; background: #fff;
+}
+.abs-btn.hadir  { border-color: var(--fern); color: var(--moss); background: var(--mist); }
+.abs-btn.alpha  { border-color: #e74c3c; color: var(--danger); }
+.abs-btn.sakit  { border-color: var(--gold); color: var(--warning); }
+.abs-btn.izin   { border-color: #3498db; color: #2980b9; }
+</style>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+document.getElementById('absensi-tanggal').valueAsDate = new Date();
+document.getElementById('gaji-bulan').value = new Date().toISOString().slice(0,7);
+
+function showTab(tab) {
+  ['karyawan','absensi','gaji'].forEach(t => {
+    document.getElementById('panel-'+t).style.display = t===tab ? '' : 'none';
+    document.getElementById('tab-'+t).classList.toggle('active', t===tab);
+  });
+  if (tab === 'absensi') loadAbsensi();
+}
+
+// ── KARYAWAN ──
+let allKaryawan = [];
+
+async function loadKaryawan() {
+  const res = await fetch('/api/karyawan');
+  const d = await res.json();
+  allKaryawan = d.data;
+  document.getElementById('tbl-karyawan').innerHTML = d.data.map(k => `
+    <tr>
+      <td><strong>${k.nama}</strong></td>
+      <td>${k.jabatan}</td>
+      <td>${fmtRp(k.upah_harian)}/hari</td>
+      <td>${k.no_hp || '—'}</td>
+      <td><span class="badge badge-green">Aktif</span></td>
+      <td>
+        <button class="btn btn-danger btn-sm" onclick="hapusKaryawan(${k.id}, '${k.nama}')">
+          <i class="icon-trash-2"></i>
+        </button>
+      </td>
+    </tr>`).join('') || `<tr><td colspan="6"><div class="empty-state"><p>Belum ada karyawan</p></div></td></tr>`;
+}
+
+async function simpanKaryawan() {
+  const payload = {
+    nama: document.getElementById('fk-nama').value,
+    jabatan: document.getElementById('fk-jabatan').value,
+    upah_harian: document.getElementById('fk-upah').value,
+    no_hp: document.getElementById('fk-hp').value,
+  };
+  if (!payload.nama || !payload.upah_harian) { toast('Nama dan upah wajib diisi','error'); return; }
+  const res = await fetch('/api/karyawan', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+  if ((await res.json()).success) {
+    closeModal('modal-karyawan');
+    toast('Karyawan berhasil ditambahkan');
+    loadKaryawan();
+    document.getElementById('fk-nama').value = '';
+    document.getElementById('fk-hp').value = '';
+  }
+}
+
+async function hapusKaryawan(id, nama) {
+  if (!confirm(`Hapus karyawan ${nama}?`)) return;
+  await fetch('/api/karyawan/'+id, { method:'DELETE' });
+  toast('Karyawan dihapus', 'error');
+  loadKaryawan();
+}
+
+// ── ABSENSI ──
+async function loadAbsensi() {
+  const tgl = document.getElementById('absensi-tanggal').value;
+  const res = await fetch('/api/absensi?tanggal='+tgl);
+  const d = await res.json();
+  const absenMap = {};
+  d.data.forEach(a => { absenMap[a.karyawan_id] = a; });
+
+  const statBadge = { hadir:'badge-green', alpha:'badge-red', sakit:'badge-gold', izin:'badge-blue' };
+
+  document.getElementById('tbl-absensi').innerHTML = allKaryawan.map(k => {
+    const ab = absenMap[k.id];
+    const stat = ab ? ab.status : '—';
+    const lembur = ab ? ab.lembur_jam : 0;
+    const upahHari = ab && ab.status === 'hadir' ? (k.upah_harian + lembur * (k.upah_harian/8)*1.5) : 0;
+    return `<tr>
+      <td><strong>${k.nama}</strong></td>
+      <td style="color:var(--text-soft)">${k.jabatan}</td>
+      <td><span class="badge ${statBadge[stat]||'badge-gray'}">${stat}</span></td>
+      <td>${lembur > 0 ? lembur + ' jam' : '—'}</td>
+      <td>${upahHari > 0 ? fmtRp(upahHari) : '—'}</td>
+      <td>
+        <div class="absensi-quick">
+          ${['hadir','alpha','sakit','izin'].map(s =>
+            `<button class="abs-btn ${s}" onclick="setAbsensi(${k.id},'${s}','${tgl}')">${s}</button>`
+          ).join('')}
+        </div>
+      </td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="6"><div class="empty-state"><p>Tidak ada karyawan terdaftar</p></div></td></tr>`;
+}
+
+async function setAbsensi(kid, status, tgl) {
+  await fetch('/api/absensi', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ karyawan_id: kid, tanggal: tgl, status })
+  });
+  toast(`Absensi dicatat: ${status}`);
+  loadAbsensi();
+}
+
+function inputAbsensiCepat() {
+  const tgl = document.getElementById('absensi-tanggal').value;
+  allKaryawan.forEach(k => setAbsensi(k.id, 'hadir', tgl));
+  setTimeout(() => { toast('Semua karyawan ditandai hadir ✓'); loadAbsensi(); }, 500);
+}
+
+// ── GAJI ──
+async function loadGaji() {
+  const bulan = document.getElementById('gaji-bulan').value;
+  const res = await fetch('/api/gaji/hitung?bulan='+bulan);
+  const d = await res.json();
+  const total = d.data.reduce((s,k) => s + k.total_gaji, 0);
+
+  document.getElementById('tbl-gaji').innerHTML = d.data.map(k => `
+    <tr>
+      <td><strong>${k.nama}</strong></td>
+      <td style="color:var(--text-soft)">${k.jabatan}</td>
+      <td>${k.hari_kerja} hari</td>
+      <td>${k.lembur_jam > 0 ? k.lembur_jam + ' jam' : '—'}</td>
+      <td>${fmtRp(k.upah_pokok)}</td>
+      <td>${k.upah_lembur > 0 ? fmtRp(k.upah_lembur) : '—'}</td>
+      <td><strong style="color:var(--forest)">${fmtRp(k.total_gaji)}</strong></td>
+    </tr>`).join('') || `<tr><td colspan="7"><div class="empty-state"><p>Belum ada data absensi untuk bulan ini</p></div></td></tr>`;
+
+  const sumDiv = document.getElementById('gaji-summary');
+  sumDiv.style.display = '';
+  sumDiv.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:13px;color:var(--text-soft)">Total Penggajian Bulan <strong>${bulan}</strong></div>
+      <div style="font-family:'DM Serif Display',serif;font-size:22px;color:var(--forest)">${fmtRp(total)}</div>
+    </div>`;
+}
+
+loadKaryawan();
+</script>
+{% endblock %}
