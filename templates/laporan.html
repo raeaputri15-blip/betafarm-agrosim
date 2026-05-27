@@ -1,200 +1,313 @@
 {% extends "base.html" %}
-{% block title %}Laporan{% endblock %}
+{% block title %}Laporan Keuangan{% endblock %}
 {% block page_title %}Laporan Keuangan{% endblock %}
-{% block page_sub %}Laporan Laba Rugi dan ringkasan keuangan bulanan{% endblock %}
-
-{% block content %}
-<div style="display:flex;align-items:center;gap:12px;margin-bottom:24px;flex-wrap:wrap">
-  <div class="flex items-center gap-2">
-    <label style="font-size:12px;font-weight:600;color:var(--text-mid)">Periode:</label>
-    <input type="month" id="lap-bulan" style="padding:8px 12px;font-size:13px">
-    <button class="btn btn-primary" onclick="loadLaporan()"><i class="icon-file-text"></i> Generate Laporan</button>
-  </div>
-</div>
-
-<!-- LAPORAN LABA RUGI -->
-<div class="card mb-5" id="laporan-area" style="display:none">
-  <div class="card-header">
-    <div class="card-title"><i class="icon-file-text"></i> Laporan Laba Rugi</div>
-    <div id="lap-periode" style="font-size:12px;color:var(--text-soft)"></div>
-  </div>
-  <div class="card-body">
-
-    <div style="max-width:640px;margin:0 auto">
-      <!-- Kop Laporan -->
-      <div style="text-align:center;margin-bottom:28px;padding-bottom:20px;border-bottom:2px solid var(--forest)">
-        <div style="font-size:13px;color:var(--text-soft);text-transform:uppercase;letter-spacing:1px">BetaFarm — Kab. Semarang</div>
-        <div style="font-family:'DM Serif Display',serif;font-size:22px;color:var(--forest);margin:4px 0">Laporan Laba Rugi</div>
-        <div id="lap-periode-kop" style="font-size:13px;color:var(--text-soft)"></div>
-      </div>
-
-      <!-- PENDAPATAN -->
-      <div id="seksi-pendapatan"></div>
-
-      <!-- BEBAN -->
-      <div id="seksi-beban" style="margin-top:24px"></div>
-
-      <!-- LABA BERSIH -->
-      <div id="seksi-laba"></div>
-
-      <!-- RASIO -->
-      <div id="seksi-rasio" style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border)"></div>
-    </div>
-  </div>
-</div>
-
-<!-- PLACEHOLDER -->
-<div id="laporan-placeholder" class="card">
-  <div class="card-body">
-    <div class="empty-state" style="padding:60px 24px">
-      <i class="icon-bar-chart-2"></i>
-      <h3>Pilih Periode & Generate Laporan</h3>
-      <p>Pilih bulan di atas lalu klik "Generate Laporan" untuk melihat<br>Laporan Laba Rugi secara otomatis.</p>
-    </div>
-  </div>
-</div>
-{% endblock %}
+{% block page_sub %}Semua laporan otomatis dari data transaksi yang sudah masuk{% endblock %}
 
 {% block extra_style %}
 <style>
-.lr-row {
-  display:flex; justify-content:space-between; align-items:center;
-  padding: 9px 0;
-  border-bottom: 1px solid var(--border);
-  font-size: 14px;
-}
-.lr-row:last-child { border-bottom: none; }
-.lr-row .label { color: var(--text-mid); }
-.lr-row .amount { font-weight: 600; color: var(--text-dark); }
-.lr-section-title {
-  font-family: 'DM Serif Display', serif;
-  font-size: 16px;
-  color: var(--forest);
-  margin-bottom: 8px;
-  padding-bottom: 6px;
-  border-bottom: 2px solid var(--forest);
-}
-.lr-subtotal {
-  display:flex; justify-content:space-between; align-items:center;
-  padding: 10px 12px;
-  background: var(--fog);
-  border-radius: 8px;
-  margin-top: 6px;
-  font-weight: 600;
-}
-.lr-total {
-  display:flex; justify-content:space-between; align-items:center;
-  padding: 16px 20px;
-  border-radius: 12px;
-  margin-top: 20px;
-  font-size: 16px;
-  font-weight: 700;
-}
-.rasio-item {
-  background: #fff;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 14px 16px;
-  display:flex; justify-content:space-between; align-items:center;
-}
+.folder-nav { display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:24px;overflow-x:auto; }
+.folder-tab { display:flex;align-items:center;gap:6px;padding:12px 18px;border:none;background:none;
+  font-family:'DM Sans',sans-serif;font-size:13px;color:var(--text-soft);cursor:pointer;
+  border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap;transition:all .15s; }
+.folder-tab:hover { color:var(--moss); }
+.folder-tab.active { color:var(--moss);border-bottom-color:var(--moss);font-weight:600; }
+.lap-kop { text-align:center;padding:20px;border-bottom:3px double var(--forest);margin-bottom:20px; }
+.lap-kop h2 { font-family:'DM Serif Display',serif;font-size:20px;color:var(--forest); }
+.lap-kop p { font-size:12px;color:var(--text-soft);margin-top:4px; }
+.lap-section { margin-bottom:20px; }
+.lap-section-title { font-family:'DM Serif Display',serif;font-size:15px;color:var(--forest);
+  padding:8px 0;border-bottom:2px solid var(--forest);margin-bottom:8px; }
+.lap-row { display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px; }
+.lap-row:last-child { border-bottom:none; }
+.lap-subtotal { display:flex;justify-content:space-between;padding:10px 12px;
+  background:var(--fog);border-radius:8px;font-weight:600;margin-top:6px;font-size:13px; }
+.lap-total { display:flex;justify-content:space-between;padding:14px 18px;
+  border-radius:12px;margin-top:16px;font-size:16px;font-weight:700; }
+.catatan-item { background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:10px; }
+.catatan-item h4 { font-size:13px;font-weight:600;color:var(--forest);margin-bottom:6px; }
+.catatan-item p { font-size:12px;color:var(--text-soft);line-height:1.6; }
 </style>
+{% endblock %}
+
+{% block content %}
+<!-- FILTER PERIODE -->
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap">
+  <div class="flex items-center gap-2">
+    <label style="font-size:12px;font-weight:600;color:var(--text-mid)">Periode:</label>
+    <input type="month" id="lap-bulan" style="padding:8px 12px;font-size:13px">
+    <button class="btn btn-primary btn-sm" onclick="loadAllLaporan()">
+      <i class="icon-refresh-cw"></i> Muat Semua Laporan
+    </button>
+  </div>
+  <div id="lap-status" style="font-size:12px;color:var(--text-soft)"></div>
+</div>
+
+<!-- FOLDER NAVIGATION -->
+<div class="folder-nav">
+  <button class="folder-tab active" id="tab-lr" onclick="showLap('lr')">📊 Laba Rugi</button>
+  <button class="folder-tab" id="tab-ekuitas" onclick="showLap('ekuitas')">💰 Perubahan Ekuitas</button>
+  <button class="folder-tab" id="tab-neraca" onclick="showLap('neraca')">⚖️ Neraca / Posisi Keuangan</button>
+  <button class="folder-tab" id="tab-arus" onclick="showLap('arus')">💸 Arus Kas</button>
+  <button class="folder-tab" id="tab-catatan" onclick="showLap('catatan')">📝 Catatan Keuangan</button>
+</div>
+
+<!-- ══ LAPORAN LABA RUGI ══ -->
+<div id="panel-lr" class="tab-panel">
+  <div class="card">
+    <div class="card-body">
+      <div style="max-width:640px;margin:0 auto" id="isi-lr">
+        <div class="loading"><div class="spinner"></div> Memuat...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ LAPORAN PERUBAHAN EKUITAS ══ -->
+<div id="panel-ekuitas" class="tab-panel" style="display:none">
+  <div class="card">
+    <div class="card-body">
+      <div style="max-width:640px;margin:0 auto" id="isi-ekuitas">
+        <div class="loading"><div class="spinner"></div> Memuat...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ NERACA / POSISI KEUANGAN ══ -->
+<div id="panel-neraca" class="tab-panel" style="display:none">
+  <div class="card">
+    <div class="card-body">
+      <div style="max-width:640px;margin:0 auto" id="isi-neraca">
+        <div class="loading"><div class="spinner"></div> Memuat...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ LAPORAN ARUS KAS ══ -->
+<div id="panel-arus" class="tab-panel" style="display:none">
+  <div class="card">
+    <div class="card-body">
+      <div style="max-width:640px;margin:0 auto" id="isi-arus">
+        <div class="loading"><div class="spinner"></div> Memuat...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ CATATAN KEUANGAN ══ -->
+<div id="panel-catatan" class="tab-panel" style="display:none">
+  <div id="isi-catatan">
+    <div class="loading"><div class="spinner"></div> Memuat...</div>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_script %}
 <script>
 document.getElementById('lap-bulan').value = new Date().toISOString().slice(0,7);
 
-function bulanLabel(str) {
-  const [y, m] = str.split('-');
-  const bulan = ['Januari','Februari','Maret','April','Mei','Juni',
-                 'Juli','Agustus','September','Oktober','November','Desember'];
-  return bulan[parseInt(m)-1] + ' ' + y;
+function showLap(tab) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.style.display='none');
+  document.querySelectorAll('.folder-tab').forEach(b => b.classList.remove('active'));
+  document.getElementById('panel-'+tab).style.display='';
+  document.getElementById('tab-'+tab).classList.add('active');
 }
 
-async function loadLaporan() {
+function bulanLabel(str) {
+  const [y,m] = str.split('-');
+  const bln = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  return bln[parseInt(m)-1] + ' ' + y;
+}
+
+function kop(judul, bulan) {
+  return `<div class="lap-kop">
+    <div style="font-size:11px;color:var(--text-soft);text-transform:uppercase;letter-spacing:1px">BetaFarm — Kab. Semarang</div>
+    <h2>${judul}</h2>
+    <p>Periode ${bulanLabel(bulan)}</p>
+  </div>`;
+}
+
+async function loadAllLaporan() {
   const bulan = document.getElementById('lap-bulan').value;
+  document.getElementById('lap-status').textContent = 'Memuat semua laporan...';
+  await Promise.all([loadLR(bulan), loadEkuitas(bulan), loadNeraca(bulan), loadArus(bulan), loadCatatan(bulan)]);
+  document.getElementById('lap-status').textContent = '✓ Semua laporan berhasil dimuat — ' + bulanLabel(bulan);
+}
+
+// ── LABA RUGI ──
+async function loadLR(bulan) {
   const res = await fetch('/api/laporan/laba_rugi?bulan='+bulan);
   const d = await res.json();
-
-  document.getElementById('laporan-placeholder').style.display = 'none';
-  document.getElementById('laporan-area').style.display = '';
-
-  const lbl = bulanLabel(bulan);
-  document.getElementById('lap-periode').textContent = 'Periode: ' + lbl;
-  document.getElementById('lap-periode-kop').textContent = 'Periode ' + lbl;
-
-  // Pendapatan
-  document.getElementById('seksi-pendapatan').innerHTML = `
-    <div class="lr-section-title">A. Pendapatan</div>
-    ${d.pendapatan.map(p => `
-      <div class="lr-row">
-        <span class="label">${p.akun}</span>
-        <span class="amount text-green">${fmtRp(p.total)}</span>
-      </div>`).join('') || '<div class="lr-row"><span class="label" style="color:var(--text-soft)">Tidak ada pendapatan</span><span>Rp 0</span></div>'}
-    <div class="lr-subtotal">
-      <span>Total Pendapatan</span>
-      <span class="text-green">${fmtRp(d.total_pendapatan)}</span>
-    </div>`;
-
-  // Beban
-  document.getElementById('seksi-beban').innerHTML = `
-    <div class="lr-section-title">B. Beban Usaha</div>
-    ${d.beban.map(b => `
-      <div class="lr-row">
-        <span class="label">${b.akun}</span>
-        <span class="amount text-red">(${fmtRp(b.total)})</span>
-      </div>`).join('') || '<div class="lr-row"><span class="label" style="color:var(--text-soft)">Tidak ada beban</span><span>Rp 0</span></div>'}
-    <div class="lr-subtotal">
-      <span>Total Beban</span>
-      <span class="text-red">(${fmtRp(d.total_beban)})</span>
-    </div>`;
-
-  // Laba Bersih
   const laba = d.laba_bersih;
-  const labaColor = laba >= 0 ? 'var(--moss)' : 'var(--danger)';
-  const labaBg = laba >= 0 ? 'var(--mist)' : 'var(--danger-lt)';
-  const labaLabel = laba >= 0 ? 'LABA BERSIH' : 'RUGI BERSIH';
-  document.getElementById('seksi-laba').innerHTML = `
-    <div class="lr-total" style="background:${labaBg};border:2px solid ${labaColor}">
-      <span style="color:${labaColor}">${labaLabel}</span>
-      <span style="font-family:'DM Serif Display',serif;font-size:22px;color:${labaColor}">${fmtRp(Math.abs(laba))}</span>
-    </div>`;
+  const labaColor = laba>=0?'var(--moss)':'var(--danger)';
+  const marginPct = d.total_pendapatan>0?((laba/d.total_pendapatan)*100).toFixed(1):0;
 
-  // Rasio
-  const marginPct = d.total_pendapatan > 0 ? ((laba / d.total_pendapatan) * 100).toFixed(1) : 0;
-  const rasioColor = marginPct >= 0 ? 'var(--moss)' : 'var(--danger)';
-  document.getElementById('seksi-rasio').innerHTML = `
-    <div style="font-size:12px;font-weight:600;color:var(--text-soft);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">
-      Analisis Rasio
+  document.getElementById('isi-lr').innerHTML = `
+    ${kop('Laporan Laba Rugi', bulan)}
+
+    <div class="lap-section">
+      <div class="lap-section-title">A. Pendapatan Usaha</div>
+      ${d.pendapatan.map(p=>`<div class="lap-row"><span>${p.akun}</span><span style="color:var(--moss)">${fmtRp(p.total)}</span></div>`).join('')||'<div class="lap-row"><span style="color:var(--text-soft)">Tidak ada pendapatan</span><span>Rp 0</span></div>'}
+      <div class="lap-subtotal"><span>Total Pendapatan</span><span style="color:var(--moss)">${fmtRp(d.total_pendapatan)}</span></div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
-      <div class="rasio-item">
-        <div>
-          <div style="font-size:11px;color:var(--text-soft)">Margin Laba</div>
-          <div style="font-size:18px;font-weight:700;color:${rasioColor}">${marginPct}%</div>
-        </div>
-        <div style="font-size:22px">${marginPct >= 0 ? '📈' : '📉'}</div>
+
+    <div class="lap-section">
+      <div class="lap-section-title">B. Beban Usaha</div>
+      ${d.beban.map(b=>`<div class="lap-row"><span>${b.akun}</span><span style="color:var(--danger)">(${fmtRp(b.total)})</span></div>`).join('')||'<div class="lap-row"><span style="color:var(--text-soft)">Tidak ada beban</span><span>Rp 0</span></div>'}
+      <div class="lap-subtotal"><span>Total Beban</span><span style="color:var(--danger)">(${fmtRp(d.total_beban)})</span></div>
+    </div>
+
+    <div class="lap-total" style="background:${laba>=0?'var(--mist)':'var(--danger-lt)'};border:2px solid ${labaColor}">
+      <span style="color:${labaColor}">${laba>=0?'LABA BERSIH':'RUGI BERSIH'}</span>
+      <span style="font-family:'DM Serif Display',serif;font-size:24px;color:${labaColor}">${fmtRp(Math.abs(laba))}</span>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:20px">
+      <div style="background:var(--fog);border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:11px;color:var(--text-soft)">Margin Laba</div>
+        <div style="font-size:20px;font-weight:700;color:${labaColor}">${marginPct}%</div>
       </div>
-      <div class="rasio-item">
-        <div>
-          <div style="font-size:11px;color:var(--text-soft)">Rasio Beban</div>
-          <div style="font-size:18px;font-weight:700;color:var(--warning)">
-            ${d.total_pendapatan > 0 ? ((d.total_beban/d.total_pendapatan)*100).toFixed(1) : 0}%
-          </div>
-        </div>
-        <div style="font-size:22px">⚖️</div>
+      <div style="background:var(--fog);border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:11px;color:var(--text-soft)">Rasio Beban</div>
+        <div style="font-size:20px;font-weight:700;color:var(--warning)">${d.total_pendapatan>0?((d.total_beban/d.total_pendapatan)*100).toFixed(1):0}%</div>
       </div>
-      <div class="rasio-item">
-        <div>
-          <div style="font-size:11px;color:var(--text-soft)">Status</div>
-          <div style="font-size:14px;font-weight:700;color:${labaColor}">${laba >= 0 ? 'Untung' : 'Rugi'}</div>
-        </div>
-        <div style="font-size:22px">${laba >= 0 ? '✅' : '❌'}</div>
+      <div style="background:var(--fog);border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:11px;color:var(--text-soft)">Status</div>
+        <div style="font-size:14px;font-weight:700;color:${labaColor}">${laba>=0?'✅ Untung':'❌ Rugi'}</div>
       </div>
     </div>
-    <div style="margin-top:16px;font-size:11px;color:var(--text-soft);text-align:center">
-      Laporan dibuat otomatis oleh AgroSIM · ${new Date().toLocaleDateString('id-ID', {day:'numeric',month:'long',year:'numeric'})}
+    <div style="text-align:center;font-size:11px;color:var(--text-soft);margin-top:12px">
+      Laporan dibuat otomatis oleh AgroSIM · ${new Date().toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'})}
     </div>`;
 }
+
+// ── PERUBAHAN EKUITAS ──
+async function loadEkuitas(bulan) {
+  const res = await fetch('/api/laporan/ekuitas?bulan='+bulan);
+  const d = await res.json();
+  document.getElementById('isi-ekuitas').innerHTML = `
+    ${kop('Laporan Perubahan Ekuitas', bulan)}
+    <div class="lap-section">
+      <div class="lap-section-title">Modal Benny</div>
+      <div class="lap-row"><span>Modal Awal Periode</span><span>${fmtRp(d.modal_awal)}</span></div>
+      <div class="lap-row"><span>Laba Bersih Periode Ini</span><span style="color:${d.laba_periode>=0?'var(--moss)':'var(--danger)'}">${d.laba_periode>=0?'+':'−'}${fmtRp(Math.abs(d.laba_periode))}</span></div>
+      <div class="lap-row"><span>Prive Benny</span><span style="color:var(--danger)">−${fmtRp(d.prive)}</span></div>
+      <div class="lap-subtotal"><span>Modal Akhir Periode</span><span style="color:var(--moss)">${fmtRp(d.modal_akhir)}</span></div>
+    </div>
+    <div style="background:var(--mist);border-radius:10px;padding:14px;font-size:12px;color:var(--text-mid)">
+      <strong>Catatan:</strong> Modal dipisahkan dari keuangan pribadi (prive) Pak Benny sesuai prinsip entitas bisnis terpisah.
+    </div>`;
+}
+
+// ── NERACA ──
+async function loadNeraca(bulan) {
+  const res = await fetch('/api/laporan/neraca?bulan='+bulan);
+  const d = await res.json();
+  document.getElementById('isi-neraca').innerHTML = `
+    ${kop('Laporan Posisi Keuangan (Neraca)', bulan)}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+      <div>
+        <div class="lap-section">
+          <div class="lap-section-title">ASET</div>
+          <div style="font-size:12px;font-weight:600;color:var(--text-soft);margin-bottom:6px">Aset Lancar</div>
+          ${d.aset_lancar.map(a=>`<div class="lap-row"><span style="font-size:13px">${a.akun}</span><span>${fmtRp(a.total)}</span></div>`).join('')||'<div class="lap-row"><span style="color:var(--text-soft)">—</span><span>Rp 0</span></div>'}
+          <div class="lap-subtotal"><span>Total Aset</span><span>${fmtRp(d.total_aset)}</span></div>
+        </div>
+      </div>
+      <div>
+        <div class="lap-section">
+          <div class="lap-section-title">KEWAJIBAN</div>
+          ${d.kewajiban.map(k=>`<div class="lap-row"><span style="font-size:13px">${k.akun}</span><span>${fmtRp(k.total)}</span></div>`).join('')||'<div class="lap-row"><span style="color:var(--text-soft)">Tidak ada kewajiban</span><span>Rp 0</span></div>'}
+          <div class="lap-subtotal"><span>Total Kewajiban</span><span>${fmtRp(d.total_kewajiban)}</span></div>
+        </div>
+        <div class="lap-section">
+          <div class="lap-section-title">EKUITAS</div>
+          <div class="lap-row"><span>Modal Benny</span><span>${fmtRp(d.modal)}</span></div>
+          <div class="lap-row"><span>Laba Ditahan</span><span style="color:${d.laba_ditahan>=0?'var(--moss)':'var(--danger)'}">${fmtRp(d.laba_ditahan)}</span></div>
+          <div class="lap-subtotal"><span>Total Ekuitas</span><span>${fmtRp(d.total_ekuitas)}</span></div>
+        </div>
+        <div class="lap-subtotal" style="background:var(--forest);color:#fff">
+          <span>Total Kewajiban + Ekuitas</span><span>${fmtRp(d.total_kewajiban_ekuitas)}</span>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ── ARUS KAS ──
+async function loadArus(bulan) {
+  const res = await fetch('/api/laporan/arus_kas?bulan='+bulan);
+  const d = await res.json();
+  document.getElementById('isi-arus').innerHTML = `
+    ${kop('Laporan Arus Kas', bulan)}
+    <div class="lap-section">
+      <div class="lap-section-title">A. Arus Kas Masuk</div>
+      ${d.kas_masuk.map(k=>`<div class="lap-row"><span style="font-size:13px">${k.keterangan}</span><span style="color:var(--moss)">${fmtRp(k.nominal)}</span></div>`).join('')||'<div class="lap-row"><span style="color:var(--text-soft)">Tidak ada kas masuk</span></div>'}
+      <div class="lap-subtotal"><span>Total Kas Masuk</span><span style="color:var(--moss)">${fmtRp(d.total_masuk)}</span></div>
+    </div>
+    <div class="lap-section">
+      <div class="lap-section-title">B. Arus Kas Keluar</div>
+      ${d.kas_keluar.map(k=>`<div class="lap-row"><span style="font-size:13px">${k.keterangan}</span><span style="color:var(--danger)">(${fmtRp(k.nominal)})</span></div>`).join('')||'<div class="lap-row"><span style="color:var(--text-soft)">Tidak ada kas keluar</span></div>'}
+      <div class="lap-subtotal"><span>Total Kas Keluar</span><span style="color:var(--danger)">(${fmtRp(d.total_keluar)})</span></div>
+    </div>
+    <div class="lap-total" style="background:${d.saldo_kas>=0?'var(--mist)':'var(--danger-lt)'};border:2px solid ${d.saldo_kas>=0?'var(--moss)':'var(--danger)'}">
+      <span>SALDO KAS BERSIH</span>
+      <span style="font-family:'DM Serif Display',serif;font-size:22px;color:${d.saldo_kas>=0?'var(--moss)':'var(--danger)'}">${fmtRp(Math.abs(d.saldo_kas))}</span>
+    </div>`;
+}
+
+// ── CATATAN KEUANGAN ──
+async function loadCatatan(bulan) {
+  const [lr, arus] = await Promise.all([
+    fetch('/api/laporan/laba_rugi?bulan='+bulan).then(r=>r.json()),
+    fetch('/api/laporan/arus_kas?bulan='+bulan).then(r=>r.json()),
+  ]);
+  const margin = lr.total_pendapatan>0?((lr.laba_bersih/lr.total_pendapatan)*100).toFixed(1):0;
+  document.getElementById('isi-catatan').innerHTML = `
+    <div style="max-width:700px">
+      <div class="card mb-4">
+        <div class="card-header"><div class="card-title">📝 Catatan atas Laporan Keuangan</div></div>
+        <div class="card-body">
+          <div class="catatan-item">
+            <h4>1. Gambaran Umum Perusahaan</h4>
+            <p>BetaFarm adalah usaha perkebunan melon hidroponik yang berlokasi di Kabupaten Semarang, Jawa Tengah. Dikelola oleh Pak Benny dengan 3 karyawan tetap dan tenaga panen lepas. Kapasitas 2 gedung dengan total 5.000 populasi (aktif 2.000). Komoditas utama: Melon SW9 Thailand dan Melon Lokal Uji Coba.</p>
+          </div>
+          <div class="catatan-item">
+            <h4>2. Kebijakan Akuntansi</h4>
+            <p>Laporan keuangan disusun berdasarkan metode <strong>accrual basis</strong>. Pencatatan menggunakan sistem <strong>double-entry bookkeeping</strong>. Periode pelaporan: bulanan. Mata uang: Rupiah (IDR). Modal prive Pak Benny dipisahkan dari keuangan usaha sesuai prinsip entitas bisnis terpisah.</p>
+          </div>
+          <div class="catatan-item">
+            <h4>3. Kebijakan Penjualan</h4>
+            <p>Melon dijual dalam 3 grade: Grade A (Rp25.000/buah), Grade B (Rp20.000/buah), Grade C (Rp15.000/buah). Penjualan melalui media sosial, WhatsApp, Facebook, kunjungan langsung, dan distributor. Pembayaran fleksibel: cash, transfer, atau titip jual (bayar setelah habis). Bukti transaksi: nota tulis tangan atau bukti transfer.</p>
+          </div>
+          <div class="catatan-item">
+            <h4>4. Kebijakan Produksi</h4>
+            <p>Siklus panen 2 bulan sekali (6x per tahun). Tingkat keberhasilan rata-rata 85%. Kegagalan 15% terutama disebabkan hama kutu kebul. Panen dilakukan oleh karyawan tetap dibantu tenaga panen lepas (borongan). Pengemasan dilakukan oleh distributor.</p>
+          </div>
+          <div class="catatan-item">
+            <h4>5. Analisis Kinerja Periode ${bulanLabel(bulan)}</h4>
+            <p>
+              Total Pendapatan: <strong>${fmtRp(lr.total_pendapatan)}</strong><br>
+              Total Beban: <strong>${fmtRp(lr.total_beban)}</strong><br>
+              Laba/Rugi Bersih: <strong style="color:${lr.laba_bersih>=0?'var(--moss)':'var(--danger)'}">${fmtRp(Math.abs(lr.laba_bersih))}</strong><br>
+              Margin Laba: <strong>${margin}%</strong><br>
+              Saldo Kas Bersih: <strong>${fmtRp(Math.abs(arus.saldo_kas))}</strong>
+            </p>
+          </div>
+          <div class="catatan-item">
+            <h4>6. Aset Tetap</h4>
+            <p>Genset: Rp60.000.000 (rusak ±1 tahun, servis Rp6.000.000/tahun ke toko pertanian). Sprayer: Rp600.000/unit (rusak ±2 tahun, pengadaan online karena sulit di toko lokal). Pralon/pipa irigasi: tidak perlu diganti, cukup kontrol dan bersihkan rutin.</p>
+          </div>
+          <div style="text-align:center;font-size:11px;color:var(--text-soft);margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+            Catatan ini merupakan bagian tidak terpisahkan dari laporan keuangan BetaFarm.<br>
+            Dibuat otomatis oleh AgroSIM v2.0 · ${new Date().toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'})}
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+// Init
+loadAllLaporan();
 </script>
 {% endblock %}
