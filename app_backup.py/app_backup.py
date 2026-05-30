@@ -291,32 +291,8 @@ def get_saldo_akun(c, akun, sampai_tanggal=None):
 # ═══════════════════════════════════════════════
 # ROUTES
 # ═══════════════════════════════════════════════
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-
-    if request.method == 'POST':
-
-        username = request.form.get('username')
-        password = request.form.get('password')
-
-        if username == USERNAME and password == PASSWORD:
-            session['login'] = True
-            return redirect('/')
-
-        return render_template(
-            'login.html',
-            error='Username atau Password Salah'
-        )
-
-    return render_template('login.html')
-    @app.route('/')
-    def dashboard():
-
-     if not session.get('login'):
-        return redirect('/login')
-
-    return render_template('dashboard.html')
+@app.route('/')
+def dashboard(): return render_template('dashboard.html')
 @app.route('/produksi')
 def produksi(): return render_template('produksi.html')
 @app.route('/sdm')
