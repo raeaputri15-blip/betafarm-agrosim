@@ -360,8 +360,8 @@
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Tgl</th><th>Keterangan</th><th>Debit</th><th>Kredit</th><th class="text-right">Nominal</th></tr></thead>
-          <tbody id="tbl-jp"><tr><td colspan="5"><div class="empty-state"><p>Belum ada jurnal penyesuaian</p></div></td></tr></tbody>
+          <thead><tr><th>Tgl</th><th>Keterangan</th><th>Debit</th><th>Kredit</th><th class="text-right">Nominal</th><th></th></tr></thead>
+          <tbody id="tbl-jp"><tr><td colspan="6"><div class="empty-state"><p>Belum ada jurnal penyesuaian</p></div></td></tr></tbody>
         </table>
       </div>
     </div>
@@ -723,8 +723,10 @@ async function loadJP() {
     <tr><td>${j.tanggal}</td><td>${j.keterangan}</td>
     <td style="color:var(--moss);font-size:12px">${j.akun_debit}</td>
     <td style="color:var(--danger);font-size:12px">${j.akun_kredit}</td>
-    <td class="text-right">${fmtRp(j.nominal)}</td></tr>`).join('') ||
-    '<tr><td colspan="5"><div class="empty-state"><p>Belum ada jurnal penyesuaian bulan ini</p></div></td></tr>';
+    <td class="text-right">${fmtRp(j.nominal)}</td>
+    <td><button class="btn btn-danger btn-sm" onclick="hapusJP(${j.id})"><i class="icon-trash-2"></i></button></td>
+    </tr>`).join('') ||
+    '<tr><td colspan="6"><div class="empty-state"><p>Belum ada jurnal penyesuaian bulan ini</p></div></td></tr>';
 }
 
 // ── JURNAL PENUTUP ──
@@ -771,6 +773,15 @@ async function generatePembalik() {
       <td style="color:var(--moss);font-size:12px">${r.akun_kredit}</td>
       <td style="color:var(--danger);font-size:12px">${r.akun_debit}</td>
       <td class="text-right">${fmtRp(r.nominal)}</td></tr>`).join('');
+  }
+}
+
+async function hapusJP(id) {
+  if(!confirm('Hapus jurnal penyesuaian ini? Data di jurnal umum juga akan dibatalkan.')) return;
+  const res = await fetch('/api/penyesuaian/'+id, {method:'DELETE'});
+  if((await res.json()).success) {
+    toast('Jurnal penyesuaian dihapus','error');
+    loadJP();
   }
 }
 

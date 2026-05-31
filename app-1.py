@@ -1,17 +1,31 @@
 """
 AgroSIM v3.0 - BetaFarm
-Auto-Posting Double Entry Accounting System
+Auto-Posting Double Entry Accounting System + Login System
 """
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 from datetime import datetime, date, timedelta
+from functools import wraps
 import sqlite3, os
 
 app = Flask(__name__)
-app.secret_key = 'betafarm2026'
+app.secret_key = 'betafarm-agrosim-2026-secret'
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['PERMANENT_SESSION_LIFETIME'] = 86400
 DB_PATH = os.path.join(os.path.dirname(__file__), 'kebun.db')
 
+# ── KREDENSIAL LOGIN ──
 USERNAME = "benny"
 PASSWORD = "betafarm123"
+
+# ── DECORATOR WAJIB LOGIN ──
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get('logged_in'):
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated
 
 def get_db():
     conn = sqlite3.connect(DB_PATH)
@@ -22,7 +36,6 @@ def get_db():
 # CHART OF ACCOUNTS (COA)
 # ═══════════════════════════════════════════════
 COA = {
-    # ASET
     '1-100': ('Kas',                          'Aset',      'Aset Lancar',    'D'),
     '1-110': ('Piutang Usaha',                'Aset',      'Aset Lancar',    'D'),
     '1-120': ('Persediaan Benih',             'Aset',      'Aset Lancar',    'D'),
@@ -33,20 +46,16 @@ COA = {
     '1-210': ('Peralatan Kebun',              'Aset',      'Aset Tetap',     'D'),
     '1-211': ('Akum. Penyusutan Peralatan',   'Aset',      'Aset Tetap',     'K'),
     '1-220': ('Bangunan/Gedung',              'Aset',      'Aset Tetap',     'D'),
-    # KEWAJIBAN
     '2-100': ('Hutang Usaha',                 'Kewajiban', 'Kewajiban Lancar','K'),
     '2-110': ('Hutang Gaji',                  'Kewajiban', 'Kewajiban Lancar','K'),
     '2-120': ('Pendapatan Diterima Dimuka',   'Kewajiban', 'Kewajiban Lancar','K'),
-    # EKUITAS
     '3-100': ('Modal Benny',                  'Ekuitas',   'Ekuitas',        'K'),
     '3-200': ('Prive Benny',                  'Ekuitas',   'Ekuitas',        'D'),
     '3-300': ('Ikhtisar Laba Rugi',           'Ekuitas',   'Ekuitas',        'K'),
-    # PENDAPATAN
     '4-100': ('Pendapatan Panen Grade A',     'Pendapatan','Pendapatan',     'K'),
     '4-110': ('Pendapatan Panen Grade B',     'Pendapatan','Pendapatan',     'K'),
     '4-120': ('Pendapatan Panen Grade C',     'Pendapatan','Pendapatan',     'K'),
     '4-200': ('Pendapatan Lain-lain',         'Pendapatan','Pendapatan',     'K'),
-    # BEBAN
     '5-100': ('Beban Gaji Karyawan',          'Beban',     'Beban Operasional','D'),
     '5-110': ('Beban Upah Panen Lepas',       'Beban',     'Beban Operasional','D'),
     '5-200': ('Beban Benih',                  'Beban',     'Beban Produksi', 'D'),
@@ -57,61 +66,41 @@ COA = {
     '5-500': ('Beban Operasional Lain',       'Beban',     'Beban Operasional','D'),
 }
 
-def kode_akun(nama):
-    for k,v in COA.items():
-        if v[0] == nama:
-            return k
-    return '9-999'
-
 # ═══════════════════════════════════════════════
 # AUTO-POSTING ENGINE
-# Mapping jenis transaksi → [[(debit_akun, kredit_akun)], kategori, sumber]
 # ═══════════════════════════════════════════════
 POSTING_RULES = {
-    # PEMBELIAN CASH
-    'beli_pupuk_cash':      [('Persediaan Pupuk & Nutrisi', 'Kas'), 'Beban', 'gudang'],
-    'beli_pestisida_cash':  [('Persediaan Pestisida',       'Kas'), 'Beban', 'gudang'],
-    'beli_benih_cash':      [('Persediaan Benih',           'Kas'), 'Beban', 'gudang'],
-    'beli_alat_cash':       [('Peralatan Kebun',            'Kas'), 'Beban', 'gudang'],
-    # PEMBELIAN KREDIT
-    'beli_pupuk_kredit':    [('Persediaan Pupuk & Nutrisi', 'Hutang Usaha'), 'Beban', 'gudang'],
-    'beli_pestisida_kredit':[('Persediaan Pestisida',       'Hutang Usaha'), 'Beban', 'gudang'],
-    'beli_benih_kredit':    [('Persediaan Benih',           'Hutang Usaha'), 'Beban', 'gudang'],
-    'beli_alat_kredit':     [('Peralatan Kebun',            'Hutang Usaha'), 'Beban', 'gudang'],
-    # PENJUALAN CASH
-    'jual_a_cash':          [('Kas',           'Pendapatan Panen Grade A'), 'Pendapatan', 'produksi'],
-    'jual_b_cash':          [('Kas',           'Pendapatan Panen Grade B'), 'Pendapatan', 'produksi'],
-    'jual_c_cash':          [('Kas',           'Pendapatan Panen Grade C'), 'Pendapatan', 'produksi'],
-    # PENJUALAN KREDIT
-    'jual_a_kredit':        [('Piutang Usaha', 'Pendapatan Panen Grade A'), 'Pendapatan', 'produksi'],
-    'jual_b_kredit':        [('Piutang Usaha', 'Pendapatan Panen Grade B'), 'Pendapatan', 'produksi'],
-    'jual_c_kredit':        [('Piutang Usaha', 'Pendapatan Panen Grade C'), 'Pendapatan', 'produksi'],
-    # PENERIMAAN PIUTANG
-    'terima_piutang':       [('Kas',           'Piutang Usaha'),            'Aset',       'manual'],
-    # BAYAR HUTANG
-    'bayar_hutang':         [('Hutang Usaha',  'Kas'),                      'Kewajiban',  'manual'],
-    # GAJI CASH
-    'gaji_cash':            [('Beban Gaji Karyawan', 'Kas'),                'Beban',      'sdm'],
-    'upah_panen_cash':      [('Beban Upah Panen Lepas', 'Kas'),             'Beban',      'sdm'],
-    # GAJI AKRUAL (hutang gaji)
-    'gaji_akrual':          [('Beban Gaji Karyawan', 'Hutang Gaji'),        'Beban',      'sdm'],
-    'bayar_hutang_gaji':    [('Hutang Gaji',   'Kas'),                      'Kewajiban',  'sdm'],
-    # PEMAKAIAN PERSEDIAAN (stok keluar)
-    'pakai_pupuk':          [('Beban Pupuk & Nutrisi', 'Persediaan Pupuk & Nutrisi'), 'Beban', 'gudang'],
-    'pakai_pestisida':      [('Beban Pestisida', 'Persediaan Pestisida'),   'Beban',      'gudang'],
-    'pakai_benih':          [('Beban Benih',   'Persediaan Benih'),         'Beban',      'gudang'],
-    # PERAWATAN & SERVIS
-    'servis_cash':          [('Beban Perawatan & Servis', 'Kas'),           'Beban',      'gudang'],
-    'biaya_lain_cash':      [('Beban Operasional Lain',   'Kas'),           'Beban',      'manual'],
-    # PENYUSUTAN
+    'beli_pupuk_cash':      [('Persediaan Pupuk & Nutrisi', 'Kas'),           'Beban',     'gudang'],
+    'beli_pestisida_cash':  [('Persediaan Pestisida',       'Kas'),           'Beban',     'gudang'],
+    'beli_benih_cash':      [('Persediaan Benih',           'Kas'),           'Beban',     'gudang'],
+    'beli_alat_cash':       [('Peralatan Kebun',            'Kas'),           'Beban',     'gudang'],
+    'beli_pupuk_kredit':    [('Persediaan Pupuk & Nutrisi', 'Hutang Usaha'),  'Beban',     'gudang'],
+    'beli_pestisida_kredit':[('Persediaan Pestisida',       'Hutang Usaha'),  'Beban',     'gudang'],
+    'beli_benih_kredit':    [('Persediaan Benih',           'Hutang Usaha'),  'Beban',     'gudang'],
+    'beli_alat_kredit':     [('Peralatan Kebun',            'Hutang Usaha'),  'Beban',     'gudang'],
+    'jual_a_cash':          [('Kas',          'Pendapatan Panen Grade A'),    'Pendapatan','produksi'],
+    'jual_b_cash':          [('Kas',          'Pendapatan Panen Grade B'),    'Pendapatan','produksi'],
+    'jual_c_cash':          [('Kas',          'Pendapatan Panen Grade C'),    'Pendapatan','produksi'],
+    'jual_a_kredit':        [('Piutang Usaha','Pendapatan Panen Grade A'),    'Pendapatan','produksi'],
+    'jual_b_kredit':        [('Piutang Usaha','Pendapatan Panen Grade B'),    'Pendapatan','produksi'],
+    'jual_c_kredit':        [('Piutang Usaha','Pendapatan Panen Grade C'),    'Pendapatan','produksi'],
+    'terima_piutang':       [('Kas',          'Piutang Usaha'),               'Aset',      'manual'],
+    'bayar_hutang':         [('Hutang Usaha', 'Kas'),                         'Kewajiban', 'manual'],
+    'gaji_cash':            [('Beban Gaji Karyawan',    'Kas'),               'Beban',     'sdm'],
+    'upah_panen_cash':      [('Beban Upah Panen Lepas', 'Kas'),               'Beban',     'sdm'],
+    'gaji_akrual':          [('Beban Gaji Karyawan',    'Hutang Gaji'),       'Beban',     'sdm'],
+    'bayar_hutang_gaji':    [('Hutang Gaji', 'Kas'),                          'Kewajiban', 'sdm'],
+    'pakai_pupuk':          [('Beban Pupuk & Nutrisi',  'Persediaan Pupuk & Nutrisi'), 'Beban','gudang'],
+    'pakai_pestisida':      [('Beban Pestisida',        'Persediaan Pestisida'),       'Beban','gudang'],
+    'pakai_benih':          [('Beban Benih',            'Persediaan Benih'),           'Beban','gudang'],
+    'servis_cash':          [('Beban Perawatan & Servis','Kas'),              'Beban',     'gudang'],
+    'biaya_lain_cash':      [('Beban Operasional Lain', 'Kas'),               'Beban',     'manual'],
     'penyusutan':           [('Beban Penyusutan Peralatan','Akum. Penyusutan Peralatan'),'Beban','manual'],
-    # MODAL & PRIVE
-    'modal_masuk':          [('Kas',           'Modal Benny'),              'Ekuitas',    'manual'],
-    'prive':                [('Prive Benny',   'Kas'),                      'Ekuitas',    'manual'],
+    'modal_masuk':          [('Kas',          'Modal Benny'),                 'Ekuitas',   'manual'],
+    'prive':                [('Prive Benny',  'Kas'),                         'Ekuitas',   'manual'],
 }
 
 def auto_post(conn, tanggal, ref, keterangan, kode_jenis, nominal):
-    """Engine utama: 1 transaksi → otomatis posting ke semua jurnal"""
     if kode_jenis not in POSTING_RULES:
         return False
     rule = POSTING_RULES[kode_jenis]
@@ -129,39 +118,33 @@ def auto_post(conn, tanggal, ref, keterangan, kode_jenis, nominal):
 # ═══════════════════════════════════════════════
 def init_db():
     conn = get_db(); c = conn.cursor()
-
     c.execute('''CREATE TABLE IF NOT EXISTS produksi (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         tanggal TEXT NOT NULL, komoditas TEXT NOT NULL, blok TEXT,
         jumlah_buah REAL NOT NULL, kualitas TEXT DEFAULT 'A',
         harga_per_buah REAL DEFAULT 0, catatan TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP)''')
-
     c.execute('''CREATE TABLE IF NOT EXISTS karyawan (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nama TEXT NOT NULL, jabatan TEXT NOT NULL, upah_harian REAL NOT NULL,
         no_hp TEXT, status TEXT DEFAULT 'aktif')''')
-
     c.execute('''CREATE TABLE IF NOT EXISTS absensi (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         karyawan_id INTEGER NOT NULL, tanggal TEXT NOT NULL,
         status TEXT NOT NULL, lembur_jam REAL DEFAULT 0,
         FOREIGN KEY (karyawan_id) REFERENCES karyawan(id))''')
-
     c.execute('''CREATE TABLE IF NOT EXISTS gudang (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nama_barang TEXT NOT NULL, kategori TEXT NOT NULL, satuan TEXT NOT NULL,
         stok_awal REAL DEFAULT 0, stok_sekarang REAL DEFAULT 0,
         harga_satuan REAL DEFAULT 0, stok_minimum REAL DEFAULT 0,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP)''')
-
     c.execute('''CREATE TABLE IF NOT EXISTS transaksi_gudang (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         barang_id INTEGER NOT NULL, tanggal TEXT NOT NULL,
         jenis TEXT NOT NULL, jumlah REAL NOT NULL,
         harga_satuan REAL DEFAULT 0, total REAL DEFAULT 0,
         keterangan TEXT)''')
-
     c.execute('''CREATE TABLE IF NOT EXISTS jurnal_umum (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         tanggal TEXT NOT NULL, no_referensi TEXT,
@@ -172,29 +155,25 @@ def init_db():
         jenis_transaksi TEXT,
         posted INTEGER DEFAULT 1,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP)''')
-
     c.execute('''CREATE TABLE IF NOT EXISTS akun_saldo (
         akun TEXT PRIMARY KEY,
         saldo REAL DEFAULT 0,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP)''')
-
     c.execute('''CREATE TABLE IF NOT EXISTS jurnal_penyesuaian (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         tanggal TEXT NOT NULL, keterangan TEXT NOT NULL,
         akun_debit TEXT NOT NULL, akun_kredit TEXT NOT NULL,
         nominal REAL NOT NULL, jenis TEXT,
         periode TEXT, is_reversed INTEGER DEFAULT 0)''')
-
     c.execute("SELECT COUNT(*) FROM karyawan")
     if c.fetchone()[0] == 0:
         _seed(c)
-
     conn.commit(); conn.close()
 
 def _seed(c):
     UMR = 2467488; UMR_H = round(UMR/26)
     c.executemany("INSERT INTO karyawan (nama,jabatan,upah_harian,no_hp) VALUES (?,?,?,?)", [
-       ('Beni Supriyatno','Owner / Pengelola Keuangan',0,'-'),
+        ('Beni Supriyatno','Owner / Pengelola Keuangan',0,'-'),
         ('Aditya Kholifatus Sabil','Supervisor',UMR_H,'-'),
         ('Mohammad Faizin','Petugas Kebun',UMR_H,'-'),
         ('Ali Rahmadhani','Petugas Kebun',UMR_H,'-'),
@@ -212,50 +191,36 @@ def _seed(c):
         ('Tali Rambatan Melon','Alat','Meter',500,320,1500,100),
         ('Spare Part Desle / Diesel','Alat','Set',2,1,6000000,1),
     ])
-    # Seed jurnal pakai auto_post engine
     today = date.today()
     p1 = (today-timedelta(days=120)).isoformat()
     p2 = (today-timedelta(days=60)).isoformat()
     POPULASI=2000; buah=int(POPULASI*0.85)
     gA=int(buah*0.6); gB=int(buah*0.3); gC=buah-gA-gB
-
     entries = [
-        # Modal awal
         ((today-timedelta(days=200)).isoformat(),'BF-M001','Modal awal Benny','modal_masuk',50000000),
-        # Beli benih
         ((today-timedelta(days=185)).isoformat(),'BF-B001','Pembelian Benih SW9 10 pack','beli_benih_cash',5000000),
         ((today-timedelta(days=185)).isoformat(),'BF-B002','Pembelian Benih Lokal 5 pack','beli_benih_cash',2500000),
-        # Beli pupuk siklus 1
         ((today-timedelta(days=170)).isoformat(),'BF-P001','Beli Nutrisi Abemix & Pupuk Daun Siklus 1 Bln 1','beli_pupuk_cash',980000),
         ((today-timedelta(days=140)).isoformat(),'BF-P002','Beli Nutrisi Abemix & Pupuk Daun Siklus 1 Bln 2','beli_pupuk_cash',980000),
-        # Beli pestisida siklus 1
         ((today-timedelta(days=165)).isoformat(),'BF-O001','Beli Insektisida & Fungisida Siklus 1','beli_pestisida_cash',1100000),
-        # Gaji siklus 1 & 2
         ((today-timedelta(days=150)).isoformat(),'BF-G001',f'Gaji 3 Karyawan Bln 1 (UMR Rp{UMR:,})','gaji_cash',3*UMR),
         ((today-timedelta(days=120)).isoformat(),'BF-G002',f'Gaji 3 Karyawan Bln 2 (UMR Rp{UMR:,})','gaji_cash',3*UMR),
-        # Panen siklus 1
         (p1,'BF-J001',f'Penjualan Melon Grade A {gA} buah × Rp25.000','jual_a_cash',gA*25000),
         (p1,'BF-J002',f'Penjualan Melon Grade B {gB} buah × Rp20.000','jual_b_cash',gB*20000),
         (p1,'BF-J003',f'Penjualan Melon Grade C {gC} buah × Rp15.000','jual_c_cash',gC*15000),
         (p1,'BF-T001','Upah Tenaga Panen Lepas Siklus 1','upah_panen_cash',750000),
-        # Beli pupuk siklus 2
         ((today-timedelta(days=110)).isoformat(),'BF-P003','Beli Nutrisi Abemix & Pupuk Daun Siklus 2 Bln 1','beli_pupuk_cash',980000),
         ((today-timedelta(days=80)).isoformat(),'BF-P004','Beli Nutrisi Abemix & Pupuk Daun Siklus 2 Bln 2','beli_pupuk_cash',980000),
-        # Beli pestisida siklus 2
         ((today-timedelta(days=105)).isoformat(),'BF-O002','Beli Insektisida & Fungisida Siklus 2','beli_pestisida_cash',1100000),
-        # Gaji siklus 2
         ((today-timedelta(days=90)).isoformat(),'BF-G003',f'Gaji 3 Karyawan Bln 3 (UMR Rp{UMR:,})','gaji_cash',3*UMR),
         ((today-timedelta(days=60)).isoformat(),'BF-G004',f'Gaji 3 Karyawan Bln 4 (UMR Rp{UMR:,})','gaji_cash',3*UMR),
-        # Panen siklus 2
         (p2,'BF-J004',f'Penjualan Melon Grade A {gA} buah × Rp25.000','jual_a_cash',gA*25000),
         (p2,'BF-J005',f'Penjualan Melon Grade B {gB} buah × Rp20.000','jual_b_cash',gB*20000),
         (p2,'BF-J006',f'Penjualan Melon Grade C {gC} buah × Rp15.000','jual_c_cash',gC*15000),
         (p2,'BF-T002','Upah Tenaga Panen Lepas Siklus 2','upah_panen_cash',750000),
-        # Perawatan alat
         ((today-timedelta(days=30)).isoformat(),'BF-A001','Beli Sprayer Pengganti (beli online)','servis_cash',600000),
         ((today-timedelta(days=15)).isoformat(),'BF-A002','Servis Desle/Diesel Genset','servis_cash',6000000),
     ]
-
     for tgl,ref,ket,jenis,nominal in entries:
         rule = POSTING_RULES[jenis]
         debit, kredit = rule[0]
@@ -265,16 +230,11 @@ def _seed(c):
             (tanggal,no_referensi,keterangan,akun_debit,akun_kredit,nominal,kategori,sumber,jenis_transaksi)
             VALUES (?,?,?,?,?,?,?,?,?)""",
             (tgl,ref,ket,debit,kredit,nominal,kategori,sumber,jenis))
-
-    # Seed produksi
     for tgl,siklus in [(p1,'Siklus 1'),(p2,'Siklus 2')]:
         for jml,kual,harga in [(gA,'A',25000),(gB,'B',20000),(gC,'C',15000)]:
             c.execute("INSERT INTO produksi (tanggal,komoditas,blok,jumlah_buah,kualitas,harga_per_buah,catatan) VALUES (?,?,?,?,?,?,?)",
                       (tgl,'Melon SW9 Thailand','Gedung 1 & 2',jml,kual,harga,f'{siklus} — {jml} buah Grade {kual}'))
 
-# ═══════════════════════════════════════════════
-# HELPER: SALDO BUKU BESAR
-# ═══════════════════════════════════════════════
 def get_saldo_akun(c, akun, sampai_tanggal=None):
     if sampai_tanggal:
         c.execute("SELECT COALESCE(SUM(nominal),0) FROM jurnal_umum WHERE akun_debit=? AND tanggal<=? AND posted=1",(akun,sampai_tanggal))
@@ -289,49 +249,66 @@ def get_saldo_akun(c, akun, sampai_tanggal=None):
     return d, k
 
 # ═══════════════════════════════════════════════
-# ROUTES
+# ROUTES — LOGIN / LOGOUT
 # ═══════════════════════════════════════════════
-
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-
+    error = None
     if request.method == 'POST':
-
-        username = request.form.get('username')
-        password = request.form.get('password')
-
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
         if username == USERNAME and password == PASSWORD:
-            session['login'] = True
-            return redirect('/')
+            session.permanent = True
+            session['logged_in'] = True
+            session['username'] = username
+            return redirect(url_for('dashboard'))
+        else:
+            error = 'Username atau password salah. Silakan coba lagi.'
+    return render_template('login.html', error=error)
 
-        return render_template(
-            'login.html',
-            error='Username atau Password Salah'
-        )
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
 
-    return render_template('login.html')
-    @app.route('/')
-    def dashboard():
-
-     if not session.get('login'):
-        return redirect('/login')
-
+# ═══════════════════════════════════════════════
+# ROUTES — HALAMAN UTAMA (WAJIB LOGIN)
+# ═══════════════════════════════════════════════
+@app.route('/')
+@login_required
+def dashboard():
     return render_template('dashboard.html')
+
 @app.route('/produksi')
-def produksi(): return render_template('produksi.html')
+@login_required
+def produksi():
+    return render_template('produksi.html')
+
 @app.route('/sdm')
-def sdm(): return render_template('sdm.html')
+@login_required
+def sdm():
+    return render_template('sdm.html')
+
 @app.route('/gudang')
-def gudang(): return render_template('gudang.html')
+@login_required
+def gudang():
+    return render_template('gudang.html')
+
 @app.route('/keuangan')
-def keuangan(): return render_template('keuangan.html')
+@login_required
+def keuangan():
+    return render_template('keuangan.html')
+
 @app.route('/laporan')
-def laporan(): return render_template('laporan.html')
+@login_required
+def laporan():
+    return render_template('laporan.html')
 
 # ═══════════════════════════════════════════════
 # API DASHBOARD
 # ═══════════════════════════════════════════════
 @app.route('/api/dashboard')
+@login_required
 def api_dashboard():
     conn = get_db(); c = conn.cursor()
     periode = request.args.get('periode','bulan_ini')
@@ -351,7 +328,6 @@ def api_dashboard():
         d_from=tgl_mulai; d_to=tgl_akhir
     else:
         d_from=today.replace(day=1).isoformat(); d_to=today.isoformat()
-
     c.execute("SELECT COALESCE(SUM(jumlah_buah),0) FROM produksi WHERE tanggal BETWEEN ? AND ?",(d_from,d_to))
     total_panen=c.fetchone()[0]
     c.execute("SELECT COALESCE(SUM(jumlah_buah*harga_per_buah),0) FROM produksi WHERE tanggal BETWEEN ? AND ?",(d_from,d_to))
@@ -364,7 +340,6 @@ def api_dashboard():
     jumlah_karyawan=c.fetchone()[0]
     c.execute("SELECT COUNT(*) FROM gudang WHERE stok_sekarang<=stok_minimum AND stok_minimum>0")
     stok_kritis=c.fetchone()[0]
-
     grafik_produksi=[]
     if periode in ['7hari','bulan_ini']:
         days=7 if periode=='7hari' else 30
@@ -376,7 +351,6 @@ def api_dashboard():
         c.execute("SELECT substr(tanggal,1,7) as bln,COALESCE(SUM(jumlah_buah),0) as total FROM produksi WHERE tanggal BETWEEN ? AND ? GROUP BY bln ORDER BY bln",(d_from,d_to))
         for r in c.fetchall():
             grafik_produksi.append({'tanggal':r['bln'],'berat':r['total']})
-
     grafik_keuangan=[]
     for i in range(5,-1,-1):
         bln=(today.replace(day=1)-timedelta(days=i*28)).strftime('%Y-%m')
@@ -385,7 +359,6 @@ def api_dashboard():
         c.execute("SELECT COALESCE(SUM(nominal),0) FROM jurnal_umum WHERE kategori='Beban' AND tanggal LIKE ? AND posted=1",(f'{bln}%',))
         beban=c.fetchone()[0]
         grafik_keuangan.append({'bulan':bln,'pendapatan':pend,'beban':beban})
-
     c.execute("""SELECT 'Panen' as jenis,tanggal,komoditas||' '||jumlah_buah||' buah' as deskripsi FROM produksi
                  UNION ALL SELECT 'Jurnal',tanggal,keterangan FROM jurnal_umum WHERE posted=1
                  ORDER BY tanggal DESC LIMIT 8""")
@@ -399,42 +372,36 @@ def api_dashboard():
                     'periode':periode,'d_from':d_from,'d_to':d_to})
 
 # ═══════════════════════════════════════════════
-# API AUTO-POSTING (INTI SISTEM)
+# API AUTO-POSTING
 # ═══════════════════════════════════════════════
 @app.route('/api/transaksi', methods=['POST'])
+@login_required
 def api_transaksi():
-    """Endpoint utama — 1 input → auto post ke semua jurnal"""
     d = request.json
     tanggal = d['tanggal']
     keterangan = d['keterangan']
     nominal = float(d['nominal'])
-    jenis = d['jenis']  # e.g. 'beli_pupuk_cash'
+    jenis = d['jenis']
     ref = d.get('ref','')
-
     if not ref:
-        # Auto generate ref
         conn = get_db(); c = conn.cursor()
         c.execute("SELECT COUNT(*) FROM jurnal_umum")
         n = c.fetchone()[0]
         conn.close()
         ref = f'TRX-{date.today().strftime("%Y%m")}-{n+1:04d}'
-
     if jenis not in POSTING_RULES:
         return jsonify({'success':False,'error':'Jenis transaksi tidak dikenal'})
-
     conn = get_db()
     ok = auto_post(conn, tanggal, ref, keterangan, jenis, nominal)
     if ok:
         conn.commit()
     conn.close()
-
     if ok:
-        return jsonify({'success':True,'ref':ref,'message':f'Transaksi berhasil diposting ke jurnal'})
+        return jsonify({'success':True,'ref':ref,'message':'Transaksi berhasil diposting ke jurnal'})
     return jsonify({'success':False,'error':'Gagal posting'})
 
 @app.route('/api/posting_rules')
 def api_posting_rules():
-    """Kirim semua rules ke frontend untuk preview otomatis"""
     rules = {k: {'debit':v[0][0],'kredit':v[0][1],'kategori':v[1]} for k,v in POSTING_RULES.items()}
     return jsonify(rules)
 
@@ -442,6 +409,7 @@ def api_posting_rules():
 # API JURNAL UMUM
 # ═══════════════════════════════════════════════
 @app.route('/api/jurnal_umum')
+@login_required
 def api_jurnal_umum():
     bulan = request.args.get('bulan', date.today().strftime('%Y-%m'))
     sumber = request.args.get('sumber','semua')
@@ -459,26 +427,26 @@ def api_jurnal_umum():
     return jsonify({'data':rows,'pendapatan':pend,'beban':beban,'laba':pend-beban})
 
 @app.route('/api/jurnal_umum/<int:id>', methods=['DELETE'])
+@login_required
 def api_jurnal_delete(id):
     conn=get_db(); conn.execute("UPDATE jurnal_umum SET posted=0 WHERE id=?",(id,)); conn.commit(); conn.close()
     return jsonify({'success':True})
 
 # ═══════════════════════════════════════════════
-# API BUKU BESAR (real-time dari jurnal)
+# API BUKU BESAR
 # ═══════════════════════════════════════════════
 @app.route('/api/buku_besar')
+@login_required
 def api_buku_besar():
     akun = request.args.get('akun','Kas')
     bulan = request.args.get('bulan', date.today().strftime('%Y-%m'))
     conn = get_db(); c = conn.cursor()
-    # Saldo awal (sebelum bulan ini)
     tgl_awal = bulan + '-01'
     c.execute("SELECT COALESCE(SUM(nominal),0) FROM jurnal_umum WHERE akun_debit=? AND tanggal<? AND posted=1",(akun,tgl_awal))
     saldo_awal_d = c.fetchone()[0]
     c.execute("SELECT COALESCE(SUM(nominal),0) FROM jurnal_umum WHERE akun_kredit=? AND tanggal<? AND posted=1",(akun,tgl_awal))
     saldo_awal_k = c.fetchone()[0]
     saldo_awal = saldo_awal_d - saldo_awal_k
-
     c.execute("""SELECT * FROM jurnal_umum WHERE (akun_debit=? OR akun_kredit=?) AND tanggal LIKE ? AND posted=1
                  ORDER BY tanggal,id""",(akun,akun,f'{bulan}%'))
     rows=[]; saldo=saldo_awal
@@ -490,17 +458,16 @@ def api_buku_besar():
             r['posisi']='K'; saldo-=r['nominal']
         r['saldo']=saldo
         rows.append(r)
-
-    # Daftar semua akun
     c.execute("SELECT DISTINCT akun_debit as a FROM jurnal_umum WHERE posted=1 UNION SELECT DISTINCT akun_kredit FROM jurnal_umum WHERE posted=1 ORDER BY a")
     semua_akun=[r['a'] for r in c.fetchall()]
     conn.close()
     return jsonify({'data':rows,'akun':akun,'saldo_awal':saldo_awal,'saldo_akhir':saldo,'semua_akun':semua_akun})
 
 # ═══════════════════════════════════════════════
-# API NERACA SALDO (auto dari buku besar)
+# API NERACA SALDO
 # ═══════════════════════════════════════════════
 @app.route('/api/neraca_saldo')
+@login_required
 def api_neraca_saldo():
     bulan = request.args.get('bulan', date.today().strftime('%Y-%m'))
     conn = get_db(); c = conn.cursor()
@@ -522,6 +489,7 @@ def api_neraca_saldo():
 # API JURNAL PENYESUAIAN
 # ═══════════════════════════════════════════════
 @app.route('/api/penyesuaian', methods=['GET'])
+@login_required
 def api_penyesuaian_list():
     bulan = request.args.get('bulan', date.today().strftime('%Y-%m'))
     conn = get_db(); c = conn.cursor()
@@ -530,21 +498,30 @@ def api_penyesuaian_list():
     conn.close()
     return jsonify({'data':rows})
 
+@app.route('/api/penyesuaian/<int:id>', methods=['DELETE'])
+@login_required
+def api_penyesuaian_delete(id):
+    conn=get_db()
+    conn.execute("DELETE FROM jurnal_penyesuaian WHERE id=?",(id,))
+    conn.commit(); conn.close()
+    return jsonify({'success':True})
+
 @app.route('/api/penyesuaian', methods=['POST'])
+@login_required
 def api_penyesuaian_add():
     d = request.json; conn = get_db()
     conn.execute("INSERT INTO jurnal_penyesuaian (tanggal,keterangan,akun_debit,akun_kredit,nominal,jenis,periode) VALUES (?,?,?,?,?,?,?)",
                  (d['tanggal'],d['keterangan'],d['akun_debit'],d['akun_kredit'],float(d['nominal']),d.get('jenis',''),d['tanggal'][:7]))
-    # Auto post ke jurnal umum juga
     conn.execute("INSERT INTO jurnal_umum (tanggal,keterangan,akun_debit,akun_kredit,nominal,kategori,sumber,jenis_transaksi) VALUES (?,?,?,?,?,?,?,?)",
                  (d['tanggal'],f"[Penyesuaian] {d['keterangan']}",d['akun_debit'],d['akun_kredit'],float(d['nominal']),'Penyesuaian','penyesuaian',d.get('jenis','')))
     conn.commit(); conn.close()
     return jsonify({'success':True})
 
 # ═══════════════════════════════════════════════
-# API LAPORAN (semua otomatis dari jurnal)
+# API LAPORAN
 # ═══════════════════════════════════════════════
 @app.route('/api/laporan/laba_rugi')
+@login_required
 def api_laba_rugi():
     bulan = request.args.get('bulan', date.today().strftime('%Y-%m'))
     conn = get_db(); c = conn.cursor()
@@ -557,6 +534,7 @@ def api_laba_rugi():
     return jsonify({'bulan':bulan,'pendapatan':pendapatan,'beban':beban,'total_pendapatan':tp,'total_beban':tb,'laba_bersih':tp-tb})
 
 @app.route('/api/laporan/neraca')
+@login_required
 def api_neraca():
     conn = get_db(); c = conn.cursor()
     def saldo(akun):
@@ -573,22 +551,22 @@ def api_neraca():
     c.execute("SELECT COALESCE(SUM(nominal),0) FROM jurnal_umum WHERE kategori='Beban' AND posted=1")
     tb=c.fetchone()[0]
     laba=tp-tb
-    aset_lancar={'Kas':kas,'Piutang Usaha':piutang,'Persediaan Benih':pers_benih,
-                 'Persediaan Pupuk & Nutrisi':pers_pupuk,'Persediaan Pestisida':pers_pest}
-    aset_tetap={'Peralatan Kebun':peralatan,'Akum. Penyusutan':f'({akum})'}
-    tot_aset_lancar=sum(v for v in aset_lancar.values() if isinstance(v,float))
+    tot_aset_lancar=kas+piutang+pers_benih+pers_pupuk+pers_pest
     tot_aset_tetap=peralatan-akum
     tot_aset=tot_aset_lancar+tot_aset_tetap
     tot_kwj=hutang+hutang_gaji
     tot_ekuitas=modal+laba-prive
     conn.close()
-    return jsonify({'aset_lancar':aset_lancar,'aset_tetap':{'Peralatan Kebun':peralatan,'Akum. Penyusutan':-akum},
+    return jsonify({'aset_lancar':{'Kas':kas,'Piutang Usaha':piutang,'Persediaan Benih':pers_benih,
+                    'Persediaan Pupuk & Nutrisi':pers_pupuk,'Persediaan Pestisida':pers_pest},
+                    'aset_tetap':{'Peralatan Kebun':peralatan,'Akum. Penyusutan':-akum},
                     'total_aset_lancar':tot_aset_lancar,'total_aset_tetap':tot_aset_tetap,'total_aset':tot_aset,
                     'hutang_usaha':hutang,'hutang_gaji':hutang_gaji,'total_kewajiban':tot_kwj,
                     'modal':modal,'laba_ditahan':laba,'prive':prive,'total_ekuitas':tot_ekuitas,
                     'total_kewajiban_ekuitas':tot_kwj+tot_ekuitas})
 
 @app.route('/api/laporan/arus_kas')
+@login_required
 def api_arus_kas():
     bulan = request.args.get('bulan', date.today().strftime('%Y-%m'))
     conn = get_db(); c = conn.cursor()
@@ -601,6 +579,7 @@ def api_arus_kas():
     return jsonify({'bulan':bulan,'kas_masuk':masuk,'kas_keluar':keluar,'total_masuk':tm,'total_keluar':tk,'saldo_kas':tm-tk})
 
 @app.route('/api/laporan/ekuitas')
+@login_required
 def api_ekuitas():
     bulan = request.args.get('bulan', date.today().strftime('%Y-%m'))
     conn = get_db(); c = conn.cursor()
@@ -617,6 +596,7 @@ def api_ekuitas():
     return jsonify({'bulan':bulan,'modal_awal':modal,'laba_periode':laba,'prive':prive,'modal_akhir':modal+laba-prive})
 
 @app.route('/api/laporan/neraca_setelah_penyesuaian')
+@login_required
 def api_neraca_setelah_penyesuaian():
     bulan = request.args.get('bulan', date.today().strftime('%Y-%m'))
     conn = get_db(); c = conn.cursor()
@@ -632,14 +612,14 @@ def api_neraca_setelah_penyesuaian():
     return jsonify({'data':result,'bulan':bulan})
 
 # ═══════════════════════════════════════════════
-# API JURNAL PENUTUP (auto generate)
+# API JURNAL PENUTUP
 # ═══════════════════════════════════════════════
 @app.route('/api/jurnal_penutup/generate', methods=['POST'])
+@login_required
 def api_generate_penutup():
     bulan = request.json.get('bulan', date.today().strftime('%Y-%m'))
     tgl_tutup = bulan + '-30'
     conn = get_db(); c = conn.cursor()
-    # Ambil semua pendapatan & beban bulan ini
     c.execute("SELECT akun_kredit as akun,SUM(nominal) as total FROM jurnal_umum WHERE kategori='Pendapatan' AND tanggal LIKE ? AND posted=1 GROUP BY akun_kredit",(f'{bulan}%',))
     pendapatan=[dict(r) for r in c.fetchall()]
     c.execute("SELECT akun_debit as akun,SUM(nominal) as total FROM jurnal_umum WHERE kategori='Beban' AND tanggal LIKE ? AND posted=1 GROUP BY akun_debit",(f'{bulan}%',))
@@ -667,9 +647,10 @@ def api_generate_penutup():
     return jsonify({'success':True,'data':penutup,'laba':laba,'bulan':bulan})
 
 # ═══════════════════════════════════════════════
-# API JURNAL PEMBALIK (auto dari penyesuaian)
+# API JURNAL PEMBALIK
 # ═══════════════════════════════════════════════
 @app.route('/api/jurnal_pembalik/generate', methods=['POST'])
+@login_required
 def api_generate_pembalik():
     bulan = request.json.get('bulan', date.today().strftime('%Y-%m'))
     conn = get_db(); c = conn.cursor()
@@ -689,6 +670,7 @@ def api_generate_pembalik():
 # API PRODUKSI
 # ═══════════════════════════════════════════════
 @app.route('/api/produksi', methods=['GET'])
+@login_required
 def api_produksi_list():
     conn=get_db(); c=conn.cursor()
     c.execute("SELECT * FROM produksi ORDER BY tanggal DESC LIMIT 100")
@@ -698,6 +680,7 @@ def api_produksi_list():
     return jsonify({'data':rows,'total_kg':s[0],'total_nilai':s[1],'total_transaksi':s[2]})
 
 @app.route('/api/produksi', methods=['POST'])
+@login_required
 def api_produksi_add():
     d=request.json; conn=get_db()
     jumlah=float(d['berat_kg']); harga=float(d.get('harga_per_kg',0)); kual=d.get('kualitas','A')
@@ -712,6 +695,7 @@ def api_produksi_add():
     return jsonify({'success':True})
 
 @app.route('/api/produksi/<int:id>', methods=['DELETE'])
+@login_required
 def api_produksi_delete(id):
     conn=get_db(); conn.execute("DELETE FROM produksi WHERE id=?",(id,)); conn.commit(); conn.close()
     return jsonify({'success':True})
@@ -720,6 +704,7 @@ def api_produksi_delete(id):
 # API SDM
 # ═══════════════════════════════════════════════
 @app.route('/api/karyawan', methods=['GET'])
+@login_required
 def api_karyawan_list():
     conn=get_db(); c=conn.cursor()
     c.execute("SELECT * FROM karyawan ORDER BY nama")
@@ -727,6 +712,7 @@ def api_karyawan_list():
     return jsonify({'data':rows})
 
 @app.route('/api/karyawan', methods=['POST'])
+@login_required
 def api_karyawan_add():
     d=request.json; conn=get_db()
     conn.execute("INSERT INTO karyawan (nama,jabatan,upah_harian,no_hp) VALUES (?,?,?,?)",
@@ -735,11 +721,13 @@ def api_karyawan_add():
     return jsonify({'success':True})
 
 @app.route('/api/karyawan/<int:id>', methods=['DELETE'])
+@login_required
 def api_karyawan_delete(id):
     conn=get_db(); conn.execute("DELETE FROM karyawan WHERE id=?",(id,)); conn.commit(); conn.close()
     return jsonify({'success':True})
 
 @app.route('/api/absensi', methods=['GET'])
+@login_required
 def api_absensi_list():
     tanggal=request.args.get('tanggal',date.today().isoformat())
     conn=get_db(); c=conn.cursor()
@@ -749,6 +737,7 @@ def api_absensi_list():
     return jsonify({'data':rows})
 
 @app.route('/api/absensi', methods=['POST'])
+@login_required
 def api_absensi_add():
     d=request.json; conn=get_db(); c=conn.cursor()
     c.execute("SELECT id FROM absensi WHERE karyawan_id=? AND tanggal=?",(d['karyawan_id'],d['tanggal']))
@@ -762,6 +751,7 @@ def api_absensi_add():
     return jsonify({'success':True})
 
 @app.route('/api/gaji/hitung')
+@login_required
 def api_hitung_gaji():
     bulan=request.args.get('bulan',date.today().strftime('%Y-%m'))
     conn=get_db(); c=conn.cursor()
@@ -780,6 +770,7 @@ def api_hitung_gaji():
     return jsonify({'data':result,'bulan':bulan})
 
 @app.route('/api/gaji/bayar', methods=['POST'])
+@login_required
 def api_bayar_gaji():
     d=request.json; conn=get_db()
     total=float(d['total']); bulan=d['bulan']; metode=d.get('metode','cash')
@@ -792,6 +783,7 @@ def api_bayar_gaji():
 # API GUDANG
 # ═══════════════════════════════════════════════
 @app.route('/api/gudang', methods=['GET'])
+@login_required
 def api_gudang_list():
     conn=get_db(); c=conn.cursor()
     c.execute("SELECT * FROM gudang ORDER BY kategori,nama_barang")
@@ -799,6 +791,7 @@ def api_gudang_list():
     return jsonify({'data':rows})
 
 @app.route('/api/gudang', methods=['POST'])
+@login_required
 def api_gudang_add():
     d=request.json; conn=get_db()
     stok=float(d.get('stok_awal',0))
@@ -808,6 +801,7 @@ def api_gudang_add():
     return jsonify({'success':True})
 
 @app.route('/api/gudang/transaksi', methods=['POST'])
+@login_required
 def api_gudang_transaksi():
     d=request.json; conn=get_db(); c=conn.cursor()
     jumlah=float(d['jumlah']); harga=float(d.get('harga_satuan',0))
@@ -837,4 +831,4 @@ if __name__ == '__main__':
     print("  AgroSIM v3.0 — BetaFarm Auto-Posting")
     print("  http://localhost:5000")
     print("="*50+"\n")
-    app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT',5000)))
+    app.run(debug=True, host='127.0.0.1', port=5000)
